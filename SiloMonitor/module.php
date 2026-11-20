@@ -25,12 +25,14 @@ class SiloMonitor extends IPSModule
 
         $this->RegisterPropertyString('Title', 'Silo-Übersicht');
         $this->RegisterPropertyString('HookName', 'silomonitor');
+        $this->RegisterPropertyString('DashboardURL', '');
         $this->RegisterPropertyString('Silos', json_encode(self::DefaultSilos()));
 
         $this->RegisterPropertyInteger('ShiftEarly', 6);
         $this->RegisterPropertyInteger('ShiftLate', 14);
         $this->RegisterPropertyInteger('ShiftNight', 22);
 
+        $this->RegisterPropertyInteger('SampleInterval', 30);
         $this->RegisterPropertyFloat('Deadband', 0.2);
         $this->RegisterPropertyFloat('MaxJump', 10.0);
         $this->RegisterPropertyInteger('FillMerge', 30);
@@ -55,7 +57,7 @@ class SiloMonitor extends IPSModule
 
         $this->RegisterMessage(0, IPS_KERNELSTARTED);
 
-        // Alte Registrierungen entfernen
+        // Erfassung läuft per Timer – evtl. alte Ereignis-Registrierungen (Version 1.0) entfernen
         foreach ($this->GetMessageList() as $senderID => $messages) {
             foreach ($messages as $message) {
                 if ($message === VM_UPDATE) {
@@ -79,9 +81,6 @@ class SiloMonitor extends IPSModule
             $this->RegisterVariableFloat('ConsShift' . $p, 'Verbrauch Schicht – ' . $silo['Name'], 'SILO.Tons', 100 + $p * 3);
             $this->RegisterVariableFloat('ConsDay' . $p, 'Verbrauch Tag – ' . $silo['Name'], 'SILO.Tons', 101 + $p * 3);
             $this->RegisterVariableFloat('FillDay' . $p, 'Befüllung Tag – ' . $silo['Name'], 'SILO.Tons', 102 + $p * 3);
-            if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons'])) {
-                $this->RegisterMessage($silo['VarTons'], VM_UPDATE);
-            }
         }
         // Variablen von Silos, die aus der Liste entfernt wurden, löschen
         for ($p = 1; $p <= self::MAX_SILOS; $p++) {
@@ -106,10 +105,13 @@ class SiloMonitor extends IPSModule
 
         $this->RegisterHook('/hook/' . $this->GetHookName());
         $this->InitReferences(false);
-        $this->SetValue('Dashboard', '<iframe src="/hook/' . $this->GetHookName()
-            . '" style="width:100%;height:100%;min-height:600px;border:0;background:#f0f0f0"></iframe>');
-        $this->SetTimerInterval('Tick', 60 * 1000);
-        $this->UpdateVariables();
+        $url = trim($this->ReadPropertyString('DashboardURL'));
+        if ($url === '') {
+            $url = '/hook/' . $this->GetHookName();
+        }
+        $this->SetValue('Dashboard', '<iframe src="' . htmlspecialchars($url) . '" style="width:100%;height:100%;min-height:600px;border:0;background:#f0f0f0"></iframe>');
+        $this->SetTimerInterval('Tick', max(5, $this->ReadPropertyInteger('SampleInterval')) * 1000);
+        $this->Tick();
     }
 
     public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
@@ -117,13 +119,6 @@ class SiloMonitor extends IPSModule
         switch ($Message) {
             case IPS_KERNELSTARTED:
                 $this->ApplyChanges();
-                break;
-            case VM_UPDATE:
-                foreach ($this->GetSilos() as $silo) {
-                    if ($silo['VarTons'] === $SenderID) {
-                        $this->ProcessLevel($silo['Pos'], (float) $Data[0], time());
-                    }
-                }
                 break;
         }
     }
@@ -143,10 +138,31 @@ class SiloMonitor extends IPSModule
     // Öffentliche Funktionen (SILO_*)
     // ------------------------------------------------------------------
 
-    /** Minütlicher Timer: Schicht-/Tageswechsel erkennen, Variablen nachführen */
+    /**
+     * Timer (Standard alle 30 s): alle Tonnen-Werte lesen, Verbrauch/Befüllung buchen,
+     * Schichtwechsel erkennen, Variablen nachführen und Dashboard-Daten zwischenspeichern.
+     * Ein Durchlauf statt eines Skriptaufrufs je OPC-Aktualisierung → kaum Last.
+     */
     public function Tick()
     {
-        $info = $this->ShiftInfo(time());
+        $t0 = microtime(true);
+        $now = time();
+        $state = $this->GetState();
+        $stats = $this->GetStats();
+        $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
+        $dirty = false;
+        foreach ($this->GetSilos() as $silo) {
+            if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons'])) {
+                $dirty = $this->ProcessLevel($silo['Pos'], (float) GetValue($silo['VarTons']), $now, $state, $stats, $events) || $dirty;
+            }
+        }
+        if ($dirty) {
+            $this->WriteAttributeString('State', json_encode($state));
+            $this->WriteAttributeString('Stats', json_encode($stats));
+            $this->WriteAttributeString('Events', json_encode($events));
+        }
+
+        $info = $this->ShiftInfo($now);
         $key = $info['day'] . '|' . $info['shift'];
         if ($this->ReadAttributeString('LastShiftKey') !== $key) {
             $this->WriteAttributeString('LastShiftKey', $key);
@@ -154,11 +170,13 @@ class SiloMonitor extends IPSModule
             $this->Prune();
         }
         $this->UpdateVariables();
+        $this->RefreshCache();
+        $this->SendDebug('Tick', sprintf('%.1f ms', (microtime(true) - $t0) * 1000), 0);
     }
 
     public function Update()
     {
-        $this->UpdateVariables();
+        $this->Tick();
     }
 
     /** Referenzwerte aus den aktuellen Füllständen übernehmen (ohne Buchung) */
@@ -173,8 +191,58 @@ class SiloMonitor extends IPSModule
         $this->WriteAttributeString('Stats', '{"S":{},"D":{}}');
         $this->WriteAttributeString('Events', '[]');
         $this->InitReferences(true);
-        $this->UpdateVariables();
+        $this->Tick();
         echo 'Statistik gelöscht.';
+    }
+
+    /** Prüft Konfiguration, WebHook und Füllstands-Variablen und gibt einen Bericht aus */
+    public function Diagnose(): string
+    {
+        $out = [];
+        $hook = '/hook/' . $this->GetHookName();
+        $ok = false;
+        foreach (IPS_GetInstanceListByModuleID(self::WEBHOOK_MODULE) as $id) {
+            foreach (json_decode(IPS_GetProperty($id, 'Hooks'), true) ?: [] as $h) {
+                if ($h['Hook'] === $hook && $h['TargetID'] === $this->InstanceID) {
+                    $ok = true;
+                }
+            }
+        }
+        $out[] = 'WebHook ' . $hook . ': ' . ($ok ? 'OK' : 'NICHT registriert – Instanz einmal speichern (Änderungen übernehmen)');
+        $out[] = 'Erfassungstakt: alle ' . $this->ReadPropertyInteger('SampleInterval') . ' s · Totband ' . $this->ReadPropertyFloat('Deadband') . ' t';
+        $info = $this->ShiftInfo(time());
+        $out[] = 'Produktionstag ' . $info['day'] . ', Schicht ' . $info['shift'] . ' (' . $info['from'] . '–' . $info['to'] . ')';
+        $out[] = '';
+        $state = $this->GetState();
+        $silos = $this->GetSilos();
+        if (count($silos) === 0) {
+            $out[] = 'Keine aktiven Silos in der Liste!';
+        }
+        foreach ($silos as $silo) {
+            $k = (string) $silo['Pos'];
+            $line = $silo['Name'] . ': ';
+            if ($silo['VarTons'] <= 0 || !IPS_VariableExists($silo['VarTons'])) {
+                $out[] = $line . 'FEHLER – Tonnen-Variable ' . $silo['VarTons'] . ' existiert nicht';
+                continue;
+            }
+            $v = IPS_GetVariable($silo['VarTons']);
+            $val = (float) GetValue($silo['VarTons']);
+            $ref = $state[$k]['ref'] ?? null;
+            $line .= sprintf('%.2f t (Var %d, zuletzt aktualisiert %s)', $val, $silo['VarTons'], date('d.m. H:i:s', $v['VariableUpdated']));
+            $line .= $ref === null ? ' · noch keine Referenz' : sprintf(' · Referenz %.2f t, Differenz %+.2f t', $ref, $val - $ref);
+            if (!empty($state[$k]['ts'])) {
+                $line .= ' · letzte Buchung ' . date('H:i', (int) $state[$k]['ts']);
+            }
+            foreach (['VarPercent' => '%', 'VarMaterial' => 'Material'] as $f => $label) {
+                if ($silo[$f] > 0 && !IPS_VariableExists($silo[$f])) {
+                    $line .= ' · ' . $label . '-Variable ' . $silo[$f] . ' fehlt';
+                }
+            }
+            $out[] = $line;
+        }
+        $text = implode("\n", $out);
+        echo $text;
+        return $text;
     }
 
     /** Liefert alle Daten des Dashboards als JSON (auch für eigene Skripte nutzbar) */
@@ -214,7 +282,7 @@ class SiloMonitor extends IPSModule
         if (isset($_GET['data'])) {
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store');
-            echo json_encode($this->BuildData());
+            echo $this->CachedJson();
             return;
         }
         header('Content-Type: text/html; charset=utf-8');
@@ -225,32 +293,28 @@ class SiloMonitor extends IPSModule
     // Erfassung
     // ------------------------------------------------------------------
 
-    private function ProcessLevel(int $pos, float $value, int $ts): void
+    private function ProcessLevel(int $pos, float $value, int $ts, array &$state, array &$stats, array &$events): bool
     {
-        $state = $this->GetState();
         $k = (string) $pos;
 
         if (!isset($state[$k]['ref'])) {
             $state[$k] = ['ref' => $value, 'dir' => 0, 'ts' => 0];
-            $this->WriteAttributeString('State', json_encode($state));
-            return;
+            return true;
         }
 
         $delta = $value - (float) $state[$k]['ref'];
         if (abs($delta) < $this->ReadPropertyFloat('Deadband')) {
-            return; // Messrauschen
+            return false; // Messrauschen
         }
 
         $maxJump = $this->ReadPropertyFloat('MaxJump');
         if ($maxJump > 0 && abs($delta) > $maxJump) {
             $this->SendDebug('Sprung ignoriert', sprintf('Silo %d: %.2f t -> %.2f t', $pos, $state[$k]['ref'], $value), 0);
             $state[$k]['ref'] = $value;
-            $this->WriteAttributeString('State', json_encode($state));
-            return;
+            return true;
         }
 
         $info = $this->ShiftInfo($ts);
-        $stats = $this->GetStats();
         $sKey = $info['day'] . '|' . $info['shift'];
         $field = $delta < 0 ? 'c' : 'f';
         $amount = abs($delta);
@@ -261,22 +325,18 @@ class SiloMonitor extends IPSModule
             }
             $stats[$type][$key][$k][$field] = round($stats[$type][$key][$k][$field] + $amount, 3);
         }
-        $this->WriteAttributeString('Stats', json_encode($stats));
 
         if ($delta > 0) {
-            $this->AddFillEvent($pos, $amount, $ts);
+            $this->AddFillEvent($pos, $amount, $ts, $events);
         }
 
         $state[$k] = ['ref' => $value, 'dir' => $delta < 0 ? -1 : 1, 'ts' => $ts];
-        $this->WriteAttributeString('State', json_encode($state));
-
         $this->SendDebug($delta < 0 ? 'Entnahme' : 'Befüllung', sprintf('Silo %d: %.2f t', $pos, $amount), 0);
-        $this->UpdateVariables();
+        return true;
     }
 
-    private function AddFillEvent(int $pos, float $amount, int $ts): void
+    private function AddFillEvent(int $pos, float $amount, int $ts, array &$events): void
     {
-        $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
         $merge = $this->ReadPropertyInteger('FillMerge') * 60;
 
         for ($i = count($events) - 1; $i >= 0; $i--) {
@@ -284,7 +344,6 @@ class SiloMonitor extends IPSModule
                 if ($ts - $events[$i]['end'] <= $merge) {
                     $events[$i]['t'] = round($events[$i]['t'] + $amount, 3);
                     $events[$i]['end'] = $ts;
-                    $this->WriteAttributeString('Events', json_encode($events));
                     return;
                 }
                 break;
@@ -294,7 +353,6 @@ class SiloMonitor extends IPSModule
         if (count($events) > 500) {
             $events = array_slice($events, -500);
         }
-        $this->WriteAttributeString('Events', json_encode($events));
     }
 
     private function InitReferences(bool $force): void
@@ -506,12 +564,37 @@ class SiloMonitor extends IPSModule
         ];
     }
 
+    /** Dashboard-Daten einmal je Timer-Durchlauf berechnen; der WebHook liefert nur noch aus. */
+    private function RefreshCache(): void
+    {
+        $this->SetBuffer('Data', json_encode($this->BuildData(), JSON_HEX_TAG | JSON_HEX_AMP));
+    }
+
+    private function CachedJson(): string
+    {
+        $json = $this->GetBuffer('Data');
+        if ($json === '') {
+            $this->RefreshCache();
+            $json = $this->GetBuffer('Data');
+        }
+        return $json;
+    }
+
     private function RenderPage(): string
     {
+        // Schrift nur einbinden, wenn die Dateien im Ordner fonts/ liegen (sonst kein Warten auf 404)
+        $fontFace = '';
+        foreach ([400 => 'Poppins-Regular', 500 => 'Poppins-Medium', 700 => 'Poppins-Bold'] as $weight => $file) {
+            $src = 'local("' . str_replace('-', ' ', $file) . '"), local("' . $file . '")';
+            if (is_file(__DIR__ . '/fonts/' . $file . '.ttf')) {
+                $src .= ', url("?font=' . $file . '") format("truetype")';
+            }
+            $fontFace .= '@font-face { font-family: "SiloPoppins"; font-weight: ' . $weight . '; font-display: swap; src: ' . $src . '; }' . "\n";
+        }
         $html = file_get_contents(__DIR__ . '/dashboard.html');
         return str_replace(
-            ['{{TITLE}}', '{{INITIAL}}'],
-            [htmlspecialchars($this->ReadPropertyString('Title')), json_encode($this->BuildData(), JSON_HEX_TAG | JSON_HEX_AMP)],
+            ['{{FONTFACE}}', '{{TITLE}}', '{{INITIAL}}'],
+            [$fontFace, htmlspecialchars($this->ReadPropertyString('Title')), $this->CachedJson()],
             $html
         );
     }

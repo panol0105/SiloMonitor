@@ -45,6 +45,7 @@
             "type": "ExpansionPanel",
             "caption": "Erfassung & Filter",
             "items": [
+                { "type": "NumberSpinner", "name": "SampleInterval", "caption": "Erfassungstakt (s) – Füllstände werden in diesem Abstand gelesen", "minimum": 5, "maximum": 300, "suffix": " s" },
                 { "type": "NumberSpinner", "name": "Deadband", "caption": "Totband (t) – kleinere Schwankungen werden ignoriert", "digits": 2, "minimum": 0, "suffix": " t" },
                 { "type": "NumberSpinner", "name": "MaxJump", "caption": "Max. Sprung je Messung (t, 0 = aus) – größere Sprünge gelten als Messfehler", "digits": 1, "minimum": 0, "suffix": " t" },
                 { "type": "NumberSpinner", "name": "FillMerge", "caption": "Befüllungen zusammenfassen innerhalb von (min)", "minimum": 1, "suffix": " min" },
@@ -55,6 +56,7 @@
             "type": "ExpansionPanel",
             "caption": "Anzeige",
             "items": [
+                { "type": "ValidationTextBox", "name": "DashboardURL", "caption": "Dashboard-Adresse für die HTMLBox (leer = /hook/silomonitor), z. B. http://192.168.1.10:3777/hook/silomonitor", "width": "700px" },
                 { "type": "NumberSpinner", "name": "WarnLevel", "caption": "Warnung unter (%)", "minimum": 0, "maximum": 100, "suffix": " %" },
                 { "type": "NumberSpinner", "name": "CriticalLevel", "caption": "Kritisch unter (%)", "minimum": 0, "maximum": 100, "suffix": " %" },
                 { "type": "NumberSpinner", "name": "RefreshSeconds", "caption": "Aktualisierung Dashboard (s)", "minimum": 2, "maximum": 300, "suffix": " s" }
@@ -63,6 +65,7 @@
     ],
     "actions": [
         { "type": "Label", "name": "HookInfo", "caption": "Dashboard-URL: http://<IP-Symcon-Server>:3777/hook/silomonitor" },
+        { "type": "Button", "caption": "Diagnose", "onClick": "SILO_Diagnose($id);" },
         { "type": "Button", "caption": "Dashboard aktualisieren", "onClick": "SILO_Update($id);" },
         { "type": "Button", "caption": "Referenzwerte neu einlesen", "onClick": "SILO_ResetReference($id);" },
         {
