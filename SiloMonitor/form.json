@@ -1,0 +1,80 @@
+{
+    "elements": [
+        {
+            "type": "ValidationTextBox",
+            "name": "Title",
+            "caption": "Titel der Anzeige"
+        },
+        {
+            "type": "List",
+            "name": "Silos",
+            "caption": "Silos (max. 12) – Verbrauch/Befüllung wird aus der Tonnen-Variable berechnet",
+            "rowCount": 12,
+            "add": true,
+            "delete": true,
+            "sort": {
+                "column": "Pos",
+                "direction": "ascending"
+            },
+            "columns": [
+                { "caption": "Pos", "name": "Pos", "width": "60px", "add": 1, "edit": { "type": "NumberSpinner", "minimum": 1, "maximum": 12 } },
+                { "caption": "Aktiv", "name": "Active", "width": "70px", "add": true, "edit": { "type": "CheckBox" } },
+                { "caption": "Name", "name": "Name", "width": "140px", "add": "Silo", "edit": { "type": "ValidationTextBox" } },
+                { "caption": "Füllstand %", "name": "VarPercent", "width": "220px", "add": 0, "edit": { "type": "SelectVariable" } },
+                { "caption": "Füllstand t", "name": "VarTons", "width": "220px", "add": 0, "edit": { "type": "SelectVariable" } },
+                { "caption": "Material", "name": "VarMaterial", "width": "220px", "add": 0, "edit": { "type": "SelectVariable" } },
+                { "caption": "Kapazität t (0 = auto)", "name": "Capacity", "width": "auto", "add": 0, "edit": { "type": "NumberSpinner", "digits": 1, "suffix": " t" } }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Schichtmodell",
+            "items": [
+                { "type": "Label", "caption": "Der Produktionstag beginnt mit der Frühschicht. Die Nachtschicht zählt zum Tag, an dem sie beginnt." },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "NumberSpinner", "name": "ShiftEarly", "caption": "Frühschicht ab (Uhr)", "minimum": 0, "maximum": 23 },
+                        { "type": "NumberSpinner", "name": "ShiftLate", "caption": "Spätschicht ab (Uhr)", "minimum": 0, "maximum": 23 },
+                        { "type": "NumberSpinner", "name": "ShiftNight", "caption": "Nachtschicht ab (Uhr)", "minimum": 0, "maximum": 23 }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Erfassung & Filter",
+            "items": [
+                { "type": "NumberSpinner", "name": "Deadband", "caption": "Totband (t) – kleinere Schwankungen werden ignoriert", "digits": 2, "minimum": 0, "suffix": " t" },
+                { "type": "NumberSpinner", "name": "MaxJump", "caption": "Max. Sprung je Messung (t, 0 = aus) – größere Sprünge gelten als Messfehler", "digits": 1, "minimum": 0, "suffix": " t" },
+                { "type": "NumberSpinner", "name": "FillMerge", "caption": "Befüllungen zusammenfassen innerhalb von (min)", "minimum": 1, "suffix": " min" },
+                { "type": "NumberSpinner", "name": "HistoryDays", "caption": "Historie aufbewahren (Tage)", "minimum": 8, "maximum": 400 }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Anzeige",
+            "items": [
+                { "type": "NumberSpinner", "name": "WarnLevel", "caption": "Warnung unter (%)", "minimum": 0, "maximum": 100, "suffix": " %" },
+                { "type": "NumberSpinner", "name": "CriticalLevel", "caption": "Kritisch unter (%)", "minimum": 0, "maximum": 100, "suffix": " %" },
+                { "type": "NumberSpinner", "name": "RefreshSeconds", "caption": "Aktualisierung Dashboard (s)", "minimum": 2, "maximum": 300, "suffix": " s" }
+            ]
+        }
+    ],
+    "actions": [
+        { "type": "Label", "name": "HookInfo", "caption": "Dashboard-URL: http://<IP-Symcon-Server>:3777/hook/silomonitor" },
+        { "type": "Button", "caption": "Dashboard aktualisieren", "onClick": "SILO_Update($id);" },
+        { "type": "Button", "caption": "Referenzwerte neu einlesen", "onClick": "SILO_ResetReference($id);" },
+        {
+            "type": "PopupButton",
+            "caption": "Statistik löschen …",
+            "popup": {
+                "caption": "Gesamte Verbrauchs- und Befüllungshistorie löschen?",
+                "items": [
+                    { "type": "Button", "caption": "Ja, alles löschen", "onClick": "SILO_ResetStatistics($id);" }
+                ]
+            }
+        }
+    ],
+    "status": []
+}

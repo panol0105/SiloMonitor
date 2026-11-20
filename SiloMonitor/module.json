@@ -1,0 +1,15 @@
+{
+    "id": "{E2B6B242-0490-40DD-B160-32863B115C10}",
+    "name": "SiloMonitor",
+    "type": 3,
+    "vendor": "Produktion",
+    "aliases": [
+        "Silo Übersicht",
+        "Silo Monitor"
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "SILO",
+    "url": ""
+}

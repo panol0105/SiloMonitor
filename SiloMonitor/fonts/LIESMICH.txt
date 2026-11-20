@@ -1,0 +1,1 @@
+Poppins-Regular.ttf, Poppins-Medium.ttf, Poppins-Bold.ttf hier ablegen (kostenlos: fonts.google.com/specimen/Poppins). Ohne Dateien wird eine lokal installierte Poppins bzw. Segoe UI verwendet.

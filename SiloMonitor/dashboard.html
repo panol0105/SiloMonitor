@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  /* Poppins: lokal installiert oder aus modules/SiloMonitor/SiloMonitor/fonts/ über den WebHook */
+  @font-face { font-family: "SiloPoppins"; font-weight: 400; src: local("Poppins Regular"), local("Poppins-Regular"), url("?font=Poppins-Regular") format("truetype"); }
+  @font-face { font-family: "SiloPoppins"; font-weight: 500; src: local("Poppins Medium"), local("Poppins-Medium"), url("?font=Poppins-Medium") format("truetype"); }
+  @font-face { font-family: "SiloPoppins"; font-weight: 700; src: local("Poppins Bold"), local("Poppins-Bold"), url("?font=Poppins-Bold") format("truetype"); }
+
+  :root {
+    --bg: #f0f0f0;
+    --card: #ffffff;
+    --soft: #f0f3f7;
+    --line: #eceef1;
+    --text: #53565a;
+    --text-2: #5d6063;
+    --muted: #a7a8a9;
+    --primary: #0075bb;
+    --primary-soft: #e3eff7;
+    --good: #1a9f45;
+    --good-soft: #dbe8df;
+    --warning: #e28310;
+    --warning-soft: #fbeedd;
+    --critical: #d03b3b;
+    --critical-soft: #f9e1e1;
+    --cons: #2a78d6;
+    --fill: #eb6834;
+    --gap: clamp(10px, 0.85vw, 18px);
+    --radius: clamp(12px, 0.85vw, 16px);
+  }
+  /* Grundschrift wächst mit der Bildschirmbreite: ~12,5 px (Laptop) … 15 px (FullHD) … 18 px (4K) */
+  html { font-size: clamp(12.5px, 0.42vw + 7px, 18px); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); font-family: "SiloPoppins", "Poppins", "Segoe UI", Roboto, Arial, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  #stage { min-height: 100vh; padding: var(--gap) calc(var(--gap) * 1.4); display: flex; flex-direction: column; gap: var(--gap); }
+  .card { background: var(--card); border-radius: var(--radius); }
+
+  /* ---------- Kopfzeile ---------- */
+  header { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1.1rem; }
+  header h1 { font-size: 1.6rem; font-weight: 400; white-space: nowrap; }
+  .seg { display: flex; background: var(--card); border-radius: 2rem; padding: .25rem; gap: 2px; }
+  .seg > span { padding: .4rem 1rem; border-radius: 2rem; font-size: 1rem; color: #7e7c7e; white-space: nowrap; }
+  .seg > span small { font-size: .8rem; margin-left: .4rem; opacity: .85; }
+  .seg > span.on { background: var(--primary); color: #fff; font-weight: 500; }
+  .pill { background: var(--card); border-radius: 2rem; padding: .6rem 1.4rem; font-size: 1rem; white-space: nowrap; }
+  .spacer { flex: 1; }
+  .status { display: flex; align-items: center; gap: .9rem; }
+  .stand { font-size: .93rem; color: #9b9999; white-space: nowrap; }
+  .live { background: var(--good-soft); color: #2da14a; border-radius: 1rem; padding: .25rem .8rem; font-size: .93rem; font-weight: 500; white-space: nowrap; }
+  .live.off { background: var(--critical-soft); color: var(--critical); }
+  .clock { font-size: 2rem; font-weight: 500; line-height: 1; }
+
+  /* ---------- KPI-Kacheln ---------- */
+  #kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); }
+  .kpi { padding: 1rem 1.3rem; display: flex; flex-direction: column; min-width: 0; }
+  .kpi .top { display: flex; justify-content: space-between; gap: .5rem; font-size: 1rem; color: var(--text-2); }
+  .kpi .top small { font-size: .85rem; color: var(--muted); text-align: right; }
+  .kpi .val { font-size: 2.7rem; font-weight: 700; color: var(--primary); line-height: 1.15; }
+  .kpi .val.neutral { color: var(--text); }
+  .kpi .val u { text-decoration: none; font-size: 1.1rem; color: var(--text); margin-left: .25rem; }
+  .kpi .sub { font-size: .85rem; color: var(--muted); margin-top: auto; }
+  .kpi .sub b { font-weight: 500; }
+  .bar { flex: none; display: flex; gap: 2px; height: 10px; background: var(--soft); border-radius: 5px; overflow: hidden; margin: .3rem 0 .45rem; }
+  .bar i { display: block; height: 100%; }
+
+  /* ---------- Silos ---------- */
+  #silos { display: grid; gap: var(--gap); }
+  .silo { padding: .8rem .8rem .8rem; display: flex; flex-direction: column; align-items: center; min-width: 0; min-height: 0; overflow: hidden; }
+  .tags { width: 100%; min-height: 1.45rem; display: flex; justify-content: space-between; gap: 4px; }
+  .tag { font-size: .78rem; font-weight: 500; padding: .1rem .55rem; border-radius: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag.cons { background: var(--primary-soft); color: var(--primary); }
+  .tag.fill { background: var(--good-soft); color: #2da14a; animation: pulse 1.6s infinite; }
+  .tag.warning { background: var(--warning-soft); color: var(--warning); margin-left: auto; }
+  .tag.critical { background: var(--critical-soft); color: var(--critical); margin-left: auto; }
+  @keyframes pulse { 50% { opacity: .5; } }
+  .silo h2 { font-size: 1.2rem; font-weight: 500; }
+  .chip { display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip i { width: .65rem; height: .65rem; border-radius: 2px; flex: none; }
+  .silo .chip { font-size: .93rem; color: var(--text-2); }
+  .silo svg { flex: 1 1 0; width: 100%; min-height: 0; margin: .5rem 0 .4rem; }
+  .silo .pct { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+  .silo .pct u { text-decoration: none; font-size: 1.1rem; margin-left: 2px; }
+  .silo .tons { font-size: .93rem; color: var(--muted); margin-top: .2rem; white-space: nowrap; }
+  .silo .meta { width: 100%; display: flex; justify-content: space-between; gap: .3rem; margin-top: .5rem; padding-top: .45rem; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); }
+  .silo .meta b { display: block; color: var(--text); font-size: 1.05rem; font-weight: 500; white-space: nowrap; }
+  .silo .meta b.g { color: var(--good); } .silo .meta b.o { color: var(--warning); } .silo .meta b.r { color: var(--critical); }
+
+  /* ---------- untere Panels ---------- */
+  #bottom { display: grid; gap: var(--gap); grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "silo mat bal"; }
+  #pSilo { grid-area: silo; } #pMat { grid-area: mat; } #pBal { grid-area: bal; }
+  .panel { padding: 1rem 1.2rem; display: flex; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
+  .panel h3 { font-size: 1.07rem; font-weight: 700; margin-bottom: .6rem; display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: .2rem .8rem; }
+  .panel h3 small { font-size: .85rem; font-weight: 400; color: var(--text-2); }
+  .scroll { overflow: auto; min-height: 0; flex: 1 1 auto; scrollbar-width: thin; }
+
+  /* Tabellen */
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1rem; color: var(--text-2); }
+  th { position: sticky; top: 0; z-index: 2; text-align: right; font-weight: 400; font-size: .85rem; color: var(--text-2); padding: .45rem .6rem; background: var(--soft); white-space: nowrap; }
+  thead th:first-child { border-radius: 8px 0 0 8px; } thead th:last-child { border-radius: 0 8px 8px 0; }
+  td { text-align: right; padding: .32rem .6rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr:hover td { background: #f7f9fb; }
+  td.name { color: var(--text); font-weight: 500; }
+  td.name .dot { display: inline-block; width: .65rem; height: .65rem; border-radius: 2px; margin-right: .5rem; vertical-align: 0; }
+  td .chip { color: var(--text-2); }
+  td.muted { color: var(--muted); }
+  td.zero { color: #c9cacb; }
+  td.strong { color: var(--text); font-weight: 500; }
+  .cur { background: var(--primary-soft) !important; }
+  th.cur { color: var(--primary); font-weight: 500; }
+  tfoot td { position: sticky; bottom: 0; z-index: 2; font-weight: 700; color: var(--text); background: var(--soft); border-bottom: 0; padding: .45rem .6rem; }
+  tfoot td:first-child { border-radius: 8px 0 0 8px; } tfoot td:last-child { border-radius: 0 8px 8px 0; }
+  tfoot td.cur { background: #dde9f3 !important; }
+  .share { display: inline-flex; align-items: center; gap: .45rem; justify-content: flex-end; }
+  .share i { display: inline-block; width: 3.2rem; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+  .share i b { display: block; height: 100%; background: var(--primary); border-radius: 3px; }
+  .g { color: var(--good); } .o { color: var(--warning); } .r { color: var(--critical); font-weight: 500; }
+  .note { font-size: .8rem; color: var(--muted); margin-top: .5rem; }
+
+  /* Spalten-Prioritäten: abhängig von der Breite des Panels (Container Queries) */
+  @container (max-width: 820px) { .p4 { display: none; } }
+  @container (min-width: 821px) { #tblSilo td.name .dot { display: none; } }
+  @container (max-width: 620px) { .p3 { display: none; } }
+  @container (max-width: 440px) { .p2 { display: none; } }
+
+  .legend { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; font-weight: 400; color: var(--text-2); border: 1px solid var(--line); border-radius: 1rem; padding: .1rem .65rem; }
+  .legend i { width: 12px; height: 3px; border-radius: 2px; }
+  .chart { height: clamp(140px, 16vh, 220px); flex: none; }
+  .fills { margin-top: .7rem; min-height: 0; display: flex; flex-direction: column; }
+  .fills h4 { flex: none; font-size: .93rem; font-weight: 500; color: var(--text); padding: .4rem .6rem; background: var(--soft); border-radius: 8px; display: flex; justify-content: space-between; }
+  .fills h4 span { color: var(--good); }
+  .fills .list { overflow: auto; min-height: 0; max-height: 17rem; scrollbar-width: thin; }
+  .fills .row { display: grid; grid-template-columns: minmax(6.5rem, auto) 1fr auto; gap: .7rem; font-size: .93rem; padding: .3rem .6rem; border-bottom: 1px solid var(--line); color: var(--text-2); }
+  .fills .row .t { color: var(--text); font-weight: 500; }
+  .fills .row.old { color: var(--muted); }
+  .fills .live-dot { color: #2da14a; font-weight: 500; animation: pulse 1.6s infinite; }
+  .empty { color: var(--muted); font-size: .93rem; padding: .4rem .6rem; }
+  #tip { position: fixed; pointer-events: none; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 8px; padding: 6px 10px; font-size: 13px; display: none; z-index: 9; }
+
+  /* ===== Kiosk / großer Bildschirm (z. B. FullHD-Display): alles auf einen Blick, kein Scrollen ===== */
+  @media (min-width: 1500px) and (min-height: 820px) {
+    html, body { height: 100%; overflow: hidden; }
+    #stage { height: 100vh; }
+    #silos { flex: 0 0 auto; height: clamp(300px, 37vh, 560px); grid-template-rows: 100%; }
+    #bottom { flex: 1 1 0; min-height: 0; }
+    .panel { overflow: hidden; }
+    .fills { flex: 1 1 0; }
+    .fills .list { max-height: none; }
+    #silos.many { height: clamp(290px, 34vh, 520px); }
+    #silos.many .silo .pct { font-size: 1.9rem; }
+    #silos.many .silo h2 { font-size: 1.1rem; }
+    #silos.many .tag { font-size: .7rem; padding: .1rem .4rem; }
+    table.dense { font-size: .93rem; }
+    table.dense tbody td { padding-top: .08rem; padding-bottom: .08rem; }
+    .fills .list { overflow: hidden; }
+  }
+
+  /* ===== Laptop / kleinere Monitore ===== */
+  @media (max-width: 1499px), (max-height: 819px) {
+    #silos { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; }
+    .silo svg { flex: none; height: 190px; }
+    #bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "silo silo" "mat bal"; }
+  }
+  @media (max-width: 1100px) {
+    #kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #bottom { grid-template-columns: minmax(0, 1fr); grid-template-areas: "silo" "mat" "bal"; }
+  }
+  /* ===== Tablet hochkant / Handy ===== */
+  @media (max-width: 700px) {
+    html { font-size: 13px; }
+    #stage { padding: 10px; gap: 10px; }
+    header h1 { width: 100%; }
+    .seg > span:not(.on) { padding: .4rem .7rem; }
+    .seg > span:not(.on) .long { display: none; }
+    .spacer { display: none; }
+    .status { width: 100%; justify-content: space-between; }
+    #silos { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .silo svg { height: 150px; }
+    .kpi .val { font-size: 2.2rem; }
+  }
+  @media (max-width: 420px) {
+    #kpis { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <h1 id="title">{{TITLE}}</h1>
+    <div class="seg" id="shiftseg"></div>
+    <div class="pill" id="pday"></div>
+    <div class="spacer"></div>
+    <div class="status">
+      <span class="stand" id="updated"></span>
+      <span class="live" id="live">● Live</span>
+      <span class="clock" id="clock"></span>
+    </div>
+  </header>
+
+  <section id="kpis">
+    <div class="card kpi"><div class="top">Bestand gesamt<small id="k1r"></small></div><div class="val" id="k1"></div><div class="bar" id="k1bar"></div><div class="sub" id="k1s"></div></div>
+    <div class="card kpi"><div class="top">Verbrauch Schicht<small id="k2r"></small></div><div class="val" id="k2"></div><div class="bar" id="k2bar"></div><div class="sub" id="k2s"></div></div>
+    <div class="card kpi"><div class="top">Verbrauch heute<small>Produktionstag</small></div><div class="val neutral" id="k3"></div><div class="sub" id="k3s"></div></div>
+    <div class="card kpi"><div class="top">Befüllt heute<small>separat erfasst</small></div><div class="val neutral" id="k4"></div><div class="sub" id="k4s"></div></div>
+  </section>
+
+  <section id="silos"></section>
+
+  <section id="bottom">
+    <div class="card panel" id="pSilo">
+      <h3>Verbrauch · Silos<small>nur Entnahme · Angaben in t</small></h3>
+      <div class="scroll"><table id="tblSilo"></table></div>
+    </div>
+    <div class="card panel" id="pMat">
+      <h3>Verbrauch · Material<small>Ø = letzte 7 Tage · Angaben in t</small></h3>
+      <div class="scroll"><table id="tblMat"></table></div>
+      <div class="note">Reichweite = Bestand ÷ Ø-Tagesverbrauch · <span class="g">≥ 3 Tage</span> · <span class="o">1–3 Tage</span> · <span class="r">&lt; 1 Tag</span></div>
+    </div>
+    <div class="card panel" id="pBal">
+      <h3>Tagesbilanz <span class="legend"><span><i style="background:var(--cons)"></i>Verbrauch</span><span><i style="background:var(--fill)"></i>Befüllung</span></span></h3>
+      <div class="chart" id="chart"></div>
+      <div class="fills" id="fills"></div>
+    </div>
+  </section>
+</div>
+<div id="tip"></div>
+<script>
+(function () {
+  'use strict';
+  var data = {{INITIAL}};
+  var lastOk = Date.now();
+  // gleiche Farbreihenfolge wie die Trafo-Übersicht – Farbe folgt dem Material
+  var CAT = ['#2a78d6', '#1baf7a', '#eda100', '#6250d6', '#e34948', '#eb6834', '#e87ba4', '#008300'];
+  var matColor = {};
+
+  var nf1 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var nf0 = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
+  function t(v) { return nf1.format(v || 0); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function hm(ts) { var d = new Date(ts * 1000); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function dmy(s) { var p = s.split('-'); return p[2] + '.' + p[1] + '.' + p[0]; }
+  function wd(s) { return ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(s + 'T12:00:00').getDay()]; }
+  function td(v, cls) { cls = cls || ''; return v > 0.05 ? '<td class="' + cls + '">' + t(v) + '</td>' : '<td class="zero ' + cls + '">–</td>'; }
+  function reachCls(r) { return r == null ? '' : (r < 1 ? 'r' : (r < 3 ? 'o' : 'g')); }
+  function reachTxt(r) { return r == null ? '–' : (r > 99 ? '> 99' : nf1.format(r)) + ' Tg'; }
+  function chip(m) {
+    if (!m) return '<span class="chip">–</span>';
+    return '<span class="chip"><i style="background:' + (matColor[m] || '#a7a8a9') + '"></i>' + esc(m) + '</span>';
+  }
+
+  function siloSVG(pct, color) {
+    var top = 26, bottom = 232, h = bottom - top;
+    var y = bottom - h * Math.max(0, Math.min(100, pct)) / 100;
+    var shape = 'M14,26 L106,26 L106,180 L68,232 L52,232 L14,180 Z';
+    var id = 'c' + Math.random().toString(36).slice(2, 8);
+    var ticks = '';
+    [25, 50, 75].forEach(function (p) {
+      var ty = bottom - h * p / 100;
+      ticks += '<line x1="106" x2="113" y1="' + ty + '" y2="' + ty + '" stroke="#c9ccd1" stroke-width="1.5"/>';
+    });
+    return '<svg viewBox="0 0 120 262" preserveAspectRatio="xMidYMid meet">' +
+      '<defs><clipPath id="' + id + '"><path d="' + shape + '"/></clipPath></defs>' +
+      '<path d="M14,26 L60,7 L106,26 Z" fill="#e4e7eb" stroke="#c9ccd1" stroke-width="2" stroke-linejoin="round"/>' +
+      '<path d="' + shape + '" fill="#f0f3f7"/>' +
+      '<rect clip-path="url(#' + id + ')" x="0" y="' + y + '" width="120" height="' + (bottom - y + 2) + '" fill="' + color + '" fill-opacity=".85"/>' +
+      (pct > 0.5 ? '<line clip-path="url(#' + id + ')" x1="0" x2="120" y1="' + y + '" y2="' + y + '" stroke="' + color + '" stroke-width="3"/>' : '') +
+      '<path d="' + shape + '" fill="none" stroke="#c9ccd1" stroke-width="2.5" stroke-linejoin="round"/>' +
+      '<rect x="52" y="232" width="16" height="9" rx="2" fill="#c9ccd1"/>' +
+      '<path d="M20,180 L14,258 M100,180 L106,258" stroke="#d5d8dc" stroke-width="4" stroke-linecap="round"/>' +
+      ticks + '</svg>';
+  }
+
+  function render() {
+    var d = data, sh = d.shift, cur = sh.shift;
+
+    document.getElementById('shiftseg').innerHTML = [1, 2, 3].map(function (i) {
+      return '<span class="' + (i === cur ? 'on' : '') + '">' + d.shiftNames[i] + '<span class="long">schicht</span>' +
+        (i === cur ? '<small>' + sh.from + '–' + sh.to + '</small>' : '') + '</span>';
+    }).join('');
+    document.getElementById('pday').textContent = wd(d.day) + ', ' + dmy(d.day);
+
+    var mats = d.materials.map(function (m) { return m.material; }).sort();
+    matColor = {};
+    mats.forEach(function (m, i) { matColor[m] = i < CAT.length ? CAT[i] : '#a7a8a9'; });
+
+    // ---- KPIs ----
+    var tons = 0, cap = 0, low = 0, crit = 0, sumShift = 0, sumDay = 0, sumPrev = 0, sumAvg = 0, sumFill = 0;
+    d.silos.forEach(function (s) {
+      tons += s.tons; cap += (s.capacity || 0); sumShift += s.consShift; sumDay += s.consDay; sumPrev += s.consPrev; sumAvg += (s.avg7 || 0); sumFill += s.fillDay;
+      if (s.percent < d.critical) crit++; else if (s.percent < d.warn) low++;
+    });
+    document.getElementById('k1').innerHTML = t(tons) + '<u>t</u>';
+    document.getElementById('k1r').textContent = cap > 0 ? nf1.format(tons / cap * 100) + ' % von ' + nf0.format(cap) + ' t' : '';
+    document.getElementById('k1bar').innerHTML = cap > 0 ? d.materials.slice().sort(function (a, b) { return a.material < b.material ? -1 : 1; }).map(function (m) {
+      return '<i style="width:' + (m.tons / cap * 100) + '%;background:' + matColor[m.material] + '" title="' + esc(m.material) + '"></i>';
+    }).join('') : '';
+    document.getElementById('k1s').innerHTML = d.silos.length + ' Silos · ' + d.materials.length + ' Materialien · ' +
+      (crit ? '<b class="r">' + crit + ' kritisch</b> · ' : '') + (low ? '<b class="o">' + low + ' niedrig</b>' : '<b class="g">alle ok</b>');
+
+    var frac = Math.max(0, Math.min(1, (Date.now() / 1000 - sh.startTs) / (sh.endTs - sh.startTs)));
+    document.getElementById('k2').innerHTML = t(sumShift) + '<u>t</u>';
+    document.getElementById('k2r').textContent = d.shiftNames[cur] + ' · ' + sh.from + '–' + sh.to;
+    document.getElementById('k2bar').innerHTML = '<i style="width:' + (frac * 100) + '%;background:var(--primary);border-radius:5px"></i>';
+    var avgShift = sumAvg / 3;
+    document.getElementById('k2s').innerHTML = (frac > 0.1 ? 'Hochrechnung Schichtende <b>' + t(sumShift / frac) + ' t</b>' : 'Schicht läuft seit ' + hm(sh.startTs)) +
+      (avgShift > 0 ? ' · Ø Schicht ' + t(avgShift) + ' t' : '');
+
+    document.getElementById('k3').innerHTML = t(sumDay) + '<u>t</u>';
+    document.getElementById('k3s').innerHTML = 'Gestern <b>' + t(sumPrev) + ' t</b> · Ø 7 Tage ' + t(sumAvg) + ' t';
+
+    var todayFills = d.fills.filter(function (x) { return x.today; });
+    var running = d.fills.filter(function (x) { return x.running; });
+    document.getElementById('k4').innerHTML = t(sumFill) + '<u>t</u>';
+    document.getElementById('k4s').innerHTML = todayFills.length + ' Befüllung' + (todayFills.length === 1 ? '' : 'en') +
+      (running.length ? ' · <b class="g">● läuft: ' + esc(running.map(function (x) { return x.silo; }).join(', ')) + '</b>'
+        : (todayFills.length ? ' · zuletzt ' + esc(todayFills[0].silo) + ' ' + hm(todayFills[0].end) : ''));
+
+    // ---- Silos ----
+    var box = document.getElementById('silos');
+    var n = Math.max(d.silos.length, 1), many = n > 9;
+    box.style.gridTemplateColumns = 'repeat(' + n + ', minmax(0, 1fr))';
+    box.className = many ? 'many' : '';
+    box.innerHTML = d.silos.map(function (s) {
+      var status = s.percent < d.critical ? 'critical' : (s.percent < d.warn ? 'warning' : 'good');
+      var color = status === 'critical' ? '#d03b3b' : (status === 'warning' ? '#eda100' : '#27a550');
+      var badge = status === 'critical' ? '<span class="tag critical">' + (many ? 'Krit.' : 'Kritisch') + '</span>'
+        : (status === 'warning' ? '<span class="tag warning">' + (many ? 'Niedr.' : 'Niedrig') + '</span>' : '');
+      var trend = s.trend > 0 ? '<span class="tag fill">● ' + (many ? 'Füllt' : 'Befüllung') + '</span>'
+        : (s.trend < 0 ? '<span class="tag cons">↓ ' + (many ? 'Entn.' : 'Entnahme') + '</span>' : '');
+      return '<div class="card silo"><div class="tags">' + trend + badge + '</div>' +
+        '<h2>' + esc(s.name) + '</h2>' + chip(s.material) +
+        siloSVG(s.percent, color) +
+        '<div class="pct">' + nf1.format(s.percent) + '<u>%</u></div>' +
+        '<div class="tons">' + t(s.tons) + (s.capacity ? ' / ' + nf0.format(s.capacity) : '') + ' t</div>' +
+        '<div class="meta"><span>Schicht<b>' + t(s.consShift) + ' t</b></span><span style="text-align:right">Reichweite' +
+        '<b class="' + reachCls(s.reach) + '">' + reachTxt(s.reach) + '</b></span></div></div>';
+    }).join('');
+
+    // ---- Tabelle Silos ----
+    // Priorität: p1 immer · p2 ab mittlerer Breite · p3 nur bei breitem Panel. Aktuelle Schicht ist immer sichtbar.
+    function sp(i) { return i === cur ? 'cur' : 'p2'; }
+    var tot = { 1: 0, 2: 0, 3: 0 };
+    var head = '<thead><tr><th>Silo</th><th class="p4" style="text-align:left">Material</th>' +
+      [1, 2, 3].map(function (i) { return '<th class="' + sp(i) + '">' + d.shiftNames[i] + '</th>'; }).join('') +
+      '<th>Heute</th><th class="p3">Gestern</th><th class="p3">Ø 7 T</th><th class="p2">Befüllt</th><th class="p3">Anteil</th></tr></thead>';
+    var body = d.silos.map(function (s) {
+      [1, 2, 3].forEach(function (i) { tot[i] += s.shifts[i]; });
+      var share = sumDay > 0.05 ? s.consDay / sumDay * 100 : 0;
+      return '<tr><td class="name"><i class="dot" style="background:' + (matColor[s.material] || '#c9cacb') + '"></i>' + esc(s.name) + '</td>' +
+        '<td class="p4" style="text-align:left">' + chip(s.material) + '</td>' +
+        [1, 2, 3].map(function (i) { return td(s.shifts[i], sp(i)); }).join('') +
+        td(s.consDay, 'strong') + td(s.consPrev, 'p3') + (s.avg7 == null ? '<td class="zero p3">–</td>' : td(s.avg7, 'p3')) + td(s.fillDay, 'p2') +
+        '<td class="p3"><span class="share">' + nf0.format(share) + ' %<i><b style="width:' + share + '%"></b></i></span></td></tr>';
+    }).join('');
+    var foot = '<tfoot><tr><td>Summe</td><td class="p4"></td>' +
+      [1, 2, 3].map(function (i) { return '<td class="' + sp(i) + '">' + t(tot[i]) + '</td>'; }).join('') +
+      '<td>' + t(sumDay) + '</td><td class="p3">' + t(sumPrev) + '</td><td class="p3">' + t(sumAvg) + '</td><td class="p2">' + t(sumFill) + '</td><td class="p3">100 %</td></tr></tfoot>';
+    var tbl = document.getElementById('tblSilo');
+    tbl.className = many ? 'dense' : '';
+    tbl.innerHTML = head + '<tbody>' + body + '</tbody>' + foot;
+
+    // ---- Tabelle Material ----
+    var mrows = d.materials.slice().sort(function (a, b) { return a.material < b.material ? -1 : 1; });
+    var mt = { tons: 0, cs: 0, cd: 0, avg: 0 };
+    document.getElementById('tblMat').innerHTML =
+      '<thead><tr><th>Material</th><th class="p4" style="text-align:left">Silos</th><th>Bestand</th><th class="p2">Schicht</th><th>Heute</th><th class="p2">Ø/Tag</th><th>Reichweite</th></tr></thead><tbody>' +
+      (mrows.length ? mrows.map(function (m) {
+        mt.tons += m.tons; mt.cs += m.consShift; mt.cd += m.consDay; mt.avg += (m.avg7 || 0);
+        return '<tr><td class="name"><i class="dot" style="background:' + matColor[m.material] + '"></i>' + esc(m.material) + '</td>' +
+          '<td class="p4 muted" style="text-align:left">' + esc(m.silos.map(function (x) { return x.replace(/^Silo\s*/i, ''); }).join(', ')) + '</td>' +
+          td(m.tons, 'strong') + td(m.consShift, 'p2') + td(m.consDay) +
+          (m.avg7 == null ? '<td class="zero p2">–</td>' : td(m.avg7, 'p2')) +
+          '<td class="' + reachCls(m.reach) + '">' + reachTxt(m.reach) + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="empty">Keine Materialdaten</td></tr>') + '</tbody>' +
+      '<tfoot><tr><td>Summe</td><td class="p4"></td><td>' + t(mt.tons) + '</td><td class="p2">' + t(mt.cs) + '</td><td>' + t(mt.cd) + '</td><td class="p2">' + t(mt.avg) + '</td><td></td></tr></tfoot>';
+
+    renderChart(d.history);
+    renderFills(d.fills);
+  }
+
+  function renderChart(h) {
+    var el = document.getElementById('chart');
+    var W = el.clientWidth || 480, H = el.clientHeight || 168, padL = 46, padB = 22, padT = 8;
+    var max = 0;
+    h.forEach(function (x) { max = Math.max(max, x.cons, x.fill); });
+    var raw = Math.max(max, 1) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), nrm = raw / mag;
+    var step = (nrm <= 1 ? 1 : nrm <= 2 ? 2 : nrm <= 2.5 ? 2.5 : nrm <= 5 ? 5 : 10) * mag;
+    max = Math.max(step, Math.ceil(max / step) * step);
+    var plotH = H - padB - padT, slot = (W - padL) / h.length, bw = Math.max(3, Math.min(16, (slot - 10) / 2));
+    var narrow = slot < 46;
+    var svg = '<svg width="' + W + '" height="' + H + '" font-family="inherit">';
+    for (var v = 0; v <= max; v += step) {
+      var y = padT + plotH - plotH * v / max;
+      svg += '<line x1="' + padL + '" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="' + (v === 0 ? '#d5d8dc' : '#eceef1') + '"' + (v === 0 ? '' : ' stroke-dasharray="4 4"') + '/>' +
+        '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" fill="#a2a3a5" font-size="11" text-anchor="end">' + nf0.format(v) + ' t</text>';
+    }
+    h.forEach(function (x, i) {
+      var cx = padL + slot * i + slot / 2, base = padT + plotH;
+      [['cons', 'var(--cons)', -1], ['fill', 'var(--fill)', 1]].forEach(function (k) {
+        var bh = plotH * x[k[0]] / max;
+        if (bh > 0.5) {
+          var bx = k[2] < 0 ? cx - bw - 1 : cx + 1, r = Math.min(4, bh, bw / 2);
+          svg += '<path d="M' + bx + ',' + base + ' V' + (base - bh + r) + ' Q' + bx + ',' + (base - bh) + ' ' + (bx + r) + ',' + (base - bh) +
+            ' H' + (bx + bw - r) + ' Q' + (bx + bw) + ',' + (base - bh) + ' ' + (bx + bw) + ',' + (base - bh + r) + ' V' + base + ' Z" fill="' + k[1] + '"/>';
+        }
+      });
+      var isToday = i === h.length - 1;
+      svg += '<text x="' + cx + '" y="' + (H - 5) + '" fill="' + (isToday ? '#0075bb' : '#a2a3a5') + '" font-size="11" text-anchor="middle" font-weight="' + (isToday ? 500 : 400) + '">' +
+        (isToday ? 'Heute' : (narrow ? wd(x.day) : wd(x.day) + ' ' + x.day.slice(8) + '.')) + '</text>' +
+        '<rect class="hit" data-i="' + i + '" x="' + (cx - slot / 2) + '" y="0" width="' + slot + '" height="' + H + '" fill="transparent"/>';
+    });
+    el.innerHTML = svg + '</svg>';
+    var tip = document.getElementById('tip');
+    Array.prototype.forEach.call(el.querySelectorAll('.hit'), function (r) {
+      r.addEventListener('mousemove', function (e) {
+        var x = h[+r.getAttribute('data-i')];
+        tip.innerHTML = '<b>' + wd(x.day) + ', ' + dmy(x.day) + '</b><br>Verbrauch: ' + t(x.cons) + ' t<br>Befüllung: ' + t(x.fill) + ' t';
+        tip.style.display = 'block'; tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+      });
+      r.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+    });
+  }
+
+  function renderFills(f) {
+    var sum = f.filter(function (x) { return x.today; }).reduce(function (a, x) { return a + x.tons; }, 0);
+    var html = '<h4>Befüllungen heute <span>+' + t(sum) + ' t</span></h4><div class="list">';
+    if (!f.length) html += '<div class="empty">Keine Befüllungen seit gestern</div>';
+    html += f.slice(0, 20).map(function (x) {
+      var when = (x.today ? '' : 'gestern ') + hm(x.start) + (x.end - x.start > 60 ? '–' + hm(x.end) : '');
+      return '<div class="row' + (x.today ? '' : ' old') + '"><span>' + when + '</span><span>' + esc(x.silo) +
+        (x.running ? ' <span class="live-dot">● läuft</span>' : '') + '</span><span class="t">+' + t(x.tons) + ' t</span></div>';
+    }).join('');
+    document.getElementById('fills').innerHTML = html + '</div>';
+    // Kiosk: nur ganze Zeilen anzeigen, die vollständig in die Kachel passen
+    var list = document.querySelector('#fills .list');
+    if (list && getComputedStyle(list).overflow === 'hidden') {
+      var rows = list.querySelectorAll('.row'), lim = list.getBoundingClientRect().bottom;
+      for (var i = 0; i < rows.length; i++) { if (rows[i].getBoundingClientRect().bottom > lim + 1) rows[i].style.visibility = 'hidden'; }
+    }
+  }
+
+  function tick() {
+    var now = new Date();
+    document.getElementById('clock').textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+    var age = Math.round((Date.now() - lastOk) / 1000), live = document.getElementById('live');
+    var lo = new Date(lastOk);
+    document.getElementById('updated').textContent = 'Stand ' + pad(lo.getDate()) + '.' + pad(lo.getMonth() + 1) + '. ' + pad(lo.getHours()) + ':' + pad(lo.getMinutes());
+    if (age > Math.max(60, data.refresh * 4)) { live.textContent = '● Offline'; live.className = 'live off'; }
+    else { live.textContent = '● Live'; live.className = 'live'; }
+  }
+
+  function poll() {
+    fetch(location.pathname + '?data=1', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (j) { data = j; lastOk = Date.now(); render(); })
+      .catch(function () { /* Anzeige bleibt stehen, Hinweis über tick() */ })
+      .then(function () { setTimeout(poll, (data.refresh || 10) * 1000); });
+  }
+
+  // Diagramm bei Größenänderung neu zeichnen
+  var rt;
+  window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { render(); }, 150); });
+
+  render(); tick();
+  setInterval(tick, 1000);
+  setTimeout(poll, (data.refresh || 10) * 1000);
+})();
+</script>
+</body>
+</html>
