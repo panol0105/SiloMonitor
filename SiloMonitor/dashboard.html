@@ -43,6 +43,17 @@
   .seg > span { padding: .4rem 1rem; border-radius: 2rem; font-size: 1rem; color: #7e7c7e; white-space: nowrap; }
   .seg > span small { font-size: .8rem; margin-left: .4rem; opacity: .85; }
   .seg > span.on { background: var(--primary); color: #fff; font-weight: 500; }
+  .seg > span { cursor: pointer; user-select: none; transition: background .15s; }
+  .seg > span:not(.on):hover { background: var(--soft); }
+  .ldot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2da14a; margin-left: .4rem; vertical-align: 2px; animation: pulse 1.6s infinite; }
+  .seg > span.on .ldot { background: #fff; }
+  .datenav { display: flex; align-items: center; gap: .2rem; padding: .25rem .4rem; }
+  .datenav button { border: 0; background: transparent; font: inherit; color: var(--text); cursor: pointer; border-radius: 1rem; padding: .3rem .7rem; font-size: 1.1rem; line-height: 1; }
+  .datenav button:hover:not(:disabled) { background: var(--soft); }
+  .datenav button:disabled { color: #d5d8dc; cursor: default; }
+  .datenav span { padding: 0 .4rem; white-space: nowrap; }
+  .datenav button.home { font-size: .85rem; color: var(--primary); background: var(--primary-soft); margin-left: .3rem; }
+  .live.hist { background: var(--warning-soft); color: var(--warning); }
   .pill { background: var(--card); border-radius: 2rem; padding: .6rem 1.4rem; font-size: 1rem; white-space: nowrap; }
   .spacer { flex: 1; }
   .status { display: flex; align-items: center; gap: .9rem; }
@@ -137,7 +148,36 @@
   .fills .row.old { color: var(--muted); }
   .fills .live-dot { color: #2da14a; font-weight: 500; animation: pulse 1.6s infinite; }
   .empty { color: var(--muted); font-size: .93rem; padding: .4rem .6rem; }
-  #tip { position: fixed; pointer-events: none; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 8px; padding: 6px 10px; font-size: 13px; display: none; z-index: 9; }
+
+  /* ---------- Silo-Detail-Popup ---------- */
+  .silo, #tblSilo tbody tr { cursor: pointer; }
+  .silo { transition: box-shadow .15s, transform .15s; }
+  .silo:hover { box-shadow: 0 6px 20px rgba(0,0,0,.08); transform: translateY(-2px); }
+  #modal { position: fixed; inset: 0; z-index: 20; background: rgba(40,44,50,.38); display: none; align-items: center; justify-content: center; padding: 2vh 2vw; }
+  #modal.open { display: flex; }
+  .mbox { width: min(1400px, 100%); max-height: 100%; overflow: auto; padding: 1.3rem 1.5rem 1.5rem; box-shadow: 0 20px 60px rgba(0,0,0,.25); scrollbar-width: thin; }
+  .mhead { position: relative; padding-right: 3rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .mhead h2 { font-size: 1.6rem; font-weight: 500; display: flex; align-items: center; gap: .8rem; }
+  .mhead h2 .chip { font-size: 1rem; font-weight: 400; color: var(--text-2); }
+  .mhead .x { position: absolute; right: 0; top: 0; border: 0; background: var(--soft); color: var(--text); width: 2.4rem; height: 2.4rem; border-radius: 50%; font-size: 1.4rem; cursor: pointer; line-height: 1; }
+  .mhead .x:hover { background: #e4e7eb; }
+  .mkpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); margin-bottom: var(--gap); }
+  .mk { background: var(--soft); border-radius: 12px; padding: .8rem 1rem; min-width: 0; }
+  .mk .l { font-size: .85rem; color: var(--text-2); }
+  .mk .v { font-size: 1.8rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+  .mk .v u { text-decoration: none; font-size: 1rem; margin-left: .2rem; }
+  .mk .s { font-size: .8rem; color: var(--muted); }
+  .mk .s b { font-weight: 500; color: var(--text-2); }
+  .mgrid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--gap); }
+  .mpanel { border: 1px solid var(--line); border-radius: 12px; padding: .9rem 1rem; min-width: 0; container-type: inline-size; }
+  .mpanel.wide { grid-column: 1 / -1; }
+  .mpanel h4 { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .4rem; }
+  .mchart { position: relative; }
+  .hint { background: var(--warning-soft); color: #9a5a0b; border-radius: 10px; padding: 1rem 1.2rem; font-size: .93rem; line-height: 1.5; }
+  .loading { color: var(--muted); padding: 2rem; text-align: center; }
+  @media (max-width: 900px) { .mkpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mgrid { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 700px) { #modal { padding: 0; } .mbox { border-radius: 0; height: 100%; } }
+  #tip { position: fixed; pointer-events: none; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 8px; padding: 6px 10px; font-size: 13px; display: none; z-index: 30; }
 
   /* ===== Kiosk / großer Bildschirm (z. B. FullHD-Display): alles auf einen Blick, kein Scrollen ===== */
   @media (min-width: 1500px) and (min-height: 820px) {
@@ -190,7 +230,7 @@
   <header>
     <h1 id="title">{{TITLE}}</h1>
     <div class="seg" id="shiftseg"></div>
-    <div class="pill" id="pday"></div>
+    <div class="pill datenav" id="pday"></div>
     <div class="spacer"></div>
     <div class="status">
       <span class="stand" id="updated"></span>
@@ -202,8 +242,8 @@
   <section id="kpis">
     <div class="card kpi"><div class="top">Bestand gesamt<small id="k1r"></small></div><div class="val" id="k1"></div><div class="bar" id="k1bar"></div><div class="sub" id="k1s"></div></div>
     <div class="card kpi"><div class="top">Verbrauch Schicht<small id="k2r"></small></div><div class="val" id="k2"></div><div class="bar" id="k2bar"></div><div class="sub" id="k2s"></div></div>
-    <div class="card kpi"><div class="top">Verbrauch heute<small>Produktionstag</small></div><div class="val neutral" id="k3"></div><div class="sub" id="k3s"></div></div>
-    <div class="card kpi"><div class="top">Befüllt heute<small>separat erfasst</small></div><div class="val neutral" id="k4"></div><div class="sub" id="k4s"></div></div>
+    <div class="card kpi"><div class="top">Verbrauch Tag<small id="k3r"></small></div><div class="val neutral" id="k3"></div><div class="sub" id="k3s"></div></div>
+    <div class="card kpi"><div class="top">Befüllt<small id="k4r"></small></div><div class="val neutral" id="k4"></div><div class="sub" id="k4s"></div></div>
   </section>
 
   <section id="silos"></section>
@@ -225,12 +265,17 @@
     </div>
   </section>
 </div>
+<div id="modal"><div class="card mbox" id="mbox"></div></div>
 <div id="tip"></div>
 <script>
 (function () {
   'use strict';
   var data = {{INITIAL}};
   var lastOk = Date.now();
+  var selShift = null;          // null = laufende Schicht folgen
+  var selDay = null;            // null = heute (live)
+  var lastTouch = 0;            // nach 5 min ohne Bedienung zurück auf live
+  var IDLE_MS = 5 * 60 * 1000;
   // gleiche Farbreihenfolge wie die Trafo-Übersicht – Farbe folgt dem Material
   var CAT = ['#2a78d6', '#1baf7a', '#eda100', '#6250d6', '#e34948', '#eb6834', '#e87ba4', '#008300'];
   var matColor = {};
@@ -242,6 +287,7 @@
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function hm(ts) { var d = new Date(ts * 1000); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
   function dmy(s) { var p = s.split('-'); return p[2] + '.' + p[1] + '.' + p[0]; }
+  function addDays(s, n) { var d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function wd(s) { return ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(s + 'T12:00:00').getDay()]; }
   function td(v, cls) { cls = cls || ''; return v > 0.05 ? '<td class="' + cls + '">' + t(v) + '</td>' : '<td class="zero ' + cls + '">–</td>'; }
   function reachCls(r) { return r == null ? '' : (r < 1 ? 'r' : (r < 3 ? 'o' : 'g')); }
@@ -274,13 +320,22 @@
   }
 
   function render() {
-    var d = data, sh = d.shift, cur = sh.shift;
+    var d = data, sh = d.shift;
+    var live = d.isToday ? sh.shift : 0;                 // laufende Schicht (nur am heutigen Tag)
+    var cur = selShift || (d.isToday ? sh.shift : 3);    // angezeigte Schicht
+    var st = d.shiftTimes[cur];
 
     document.getElementById('shiftseg').innerHTML = [1, 2, 3].map(function (i) {
-      return '<span class="' + (i === cur ? 'on' : '') + '">' + d.shiftNames[i] + '<span class="long">schicht</span>' +
-        (i === cur ? '<small>' + sh.from + '–' + sh.to + '</small>' : '') + '</span>';
+      return '<span data-s="' + i + '" class="' + (i === cur ? 'on' : '') + '" title="' + d.shiftTimes[i].from + '–' + d.shiftTimes[i].to + ' Uhr">' +
+        d.shiftNames[i] + '<span class="long">schicht</span>' +
+        (i === cur ? '<small>' + d.shiftTimes[i].from + '–' + d.shiftTimes[i].to + '</small>' : '') +
+        (i === live ? '<i class="ldot" title="läuft"></i>' : '') + '</span>';
     }).join('');
-    document.getElementById('pday').textContent = wd(d.day) + ', ' + dmy(d.day);
+    document.getElementById('pday').innerHTML =
+      '<button data-nav="-1" title="Vortag"' + (d.day <= d.minDay ? ' disabled' : '') + '>‹</button>' +
+      '<span>' + (d.isToday ? 'Heute, ' : wd(d.day) + ', ') + dmy(d.day) + '</span>' +
+      '<button data-nav="1" title="Folgetag"' + (d.isToday ? ' disabled' : '') + '>›</button>' +
+      (d.isToday && !selShift ? '' : '<button class="home" data-nav="0">Live</button>');
 
     var mats = d.materials.map(function (m) { return m.material; }).sort();
     matColor = {};
@@ -300,16 +355,28 @@
     document.getElementById('k1s').innerHTML = d.silos.length + ' Silos · ' + d.materials.length + ' Materialien · ' +
       (crit ? '<b class="r">' + crit + ' kritisch</b> · ' : '') + (low ? '<b class="o">' + low + ' niedrig</b>' : '<b class="g">alle ok</b>');
 
-    var frac = Math.max(0, Math.min(1, (Date.now() / 1000 - sh.startTs) / (sh.endTs - sh.startTs)));
+    sumShift = d.silos.reduce(function (a, s) { return a + s.shifts[cur]; }, 0);
+    var avgShift = sumAvg / 3, k2s;
     document.getElementById('k2').innerHTML = t(sumShift) + '<u>t</u>';
-    document.getElementById('k2r').textContent = d.shiftNames[cur] + ' · ' + sh.from + '–' + sh.to;
-    document.getElementById('k2bar').innerHTML = '<i style="width:' + (frac * 100) + '%;background:var(--primary);border-radius:5px"></i>';
-    var avgShift = sumAvg / 3;
-    document.getElementById('k2s').innerHTML = (frac > 0.1 ? 'Hochrechnung Schichtende <b>' + t(sumShift / frac) + ' t</b>' : 'Schicht läuft seit ' + hm(sh.startTs)) +
-      (avgShift > 0 ? ' · Ø Schicht ' + t(avgShift) + ' t' : '');
+    document.getElementById('k2r').textContent = d.shiftNames[cur] + ' · ' + st.from + '–' + st.to;
+    if (cur === live) {
+      var frac = Math.max(0, Math.min(1, (Date.now() / 1000 - sh.startTs) / (sh.endTs - sh.startTs)));
+      document.getElementById('k2bar').innerHTML = '<i style="width:' + (frac * 100) + '%;background:var(--primary);border-radius:5px"></i>';
+      k2s = frac > 0.1 ? 'läuft · Hochrechnung Schichtende <b>' + t(sumShift / frac) + ' t</b>' : 'läuft seit ' + st.from + ' Uhr';
+    } else if (d.isToday && cur > live) {
+      document.getElementById('k2bar').innerHTML = '';
+      k2s = 'beginnt um ' + st.from + ' Uhr';
+    } else {
+      document.getElementById('k2bar').innerHTML = '<i style="width:100%;background:#c9ccd1;border-radius:5px"></i>';
+      k2s = 'abgeschlossen' + (sumDay > 0.05 ? ' · <b>' + nf0.format(sumShift / sumDay * 100) + ' %</b> vom Tag' : '');
+    }
+    document.getElementById('k2s').innerHTML = k2s + (avgShift > 0 ? ' · Ø Schicht ' + t(avgShift) + ' t' : '');
 
+    var dayLbl = d.isToday ? 'heute' : dmy(d.day).slice(0, 6);
     document.getElementById('k3').innerHTML = t(sumDay) + '<u>t</u>';
-    document.getElementById('k3s').innerHTML = 'Gestern <b>' + t(sumPrev) + ' t</b> · Ø 7 Tage ' + t(sumAvg) + ' t';
+    document.getElementById('k3r').textContent = d.isToday ? 'Produktionstag heute' : 'Produktionstag ' + wd(d.day) + ' ' + dmy(d.day);
+    document.getElementById('k3s').innerHTML = 'Vortag <b>' + t(sumPrev) + ' t</b> · Ø 7 Tage ' + t(sumAvg) + ' t';
+    document.getElementById('k4r').textContent = (d.isToday ? 'heute' : dmy(d.day)) + ' · separat erfasst';
 
     var todayFills = d.fills.filter(function (x) { return x.today; });
     var running = d.fills.filter(function (x) { return x.running; });
@@ -330,12 +397,12 @@
         : (status === 'warning' ? '<span class="tag warning">' + (many ? 'Niedr.' : 'Niedrig') + '</span>' : '');
       var trend = s.trend > 0 ? '<span class="tag fill">● ' + (many ? 'Füllt' : 'Befüllung') + '</span>'
         : (s.trend < 0 ? '<span class="tag cons">↓ ' + (many ? 'Entn.' : 'Entnahme') + '</span>' : '');
-      return '<div class="card silo"><div class="tags">' + trend + badge + '</div>' +
+      return '<div class="card silo" data-pos="' + s.pos + '" title="Details anzeigen"><div class="tags">' + trend + badge + '</div>' +
         '<h2>' + esc(s.name) + '</h2>' + chip(s.material) +
         siloSVG(s.percent, color) +
         '<div class="pct">' + nf1.format(s.percent) + '<u>%</u></div>' +
         '<div class="tons">' + t(s.tons) + (s.capacity ? ' / ' + nf0.format(s.capacity) : '') + ' t</div>' +
-        '<div class="meta"><span>Schicht<b>' + t(s.consShift) + ' t</b></span><span style="text-align:right">Reichweite' +
+        '<div class="meta"><span>' + d.shiftNames[cur] + '<b>' + t(s.shifts[cur]) + ' t</b></span><span style="text-align:right">Reichweite' +
         '<b class="' + reachCls(s.reach) + '">' + reachTxt(s.reach) + '</b></span></div></div>';
     }).join('');
 
@@ -345,11 +412,11 @@
     var tot = { 1: 0, 2: 0, 3: 0 };
     var head = '<thead><tr><th>Silo</th><th class="p4" style="text-align:left">Material</th>' +
       [1, 2, 3].map(function (i) { return '<th class="' + sp(i) + '">' + d.shiftNames[i] + '</th>'; }).join('') +
-      '<th>Heute</th><th class="p3">Gestern</th><th class="p3">Ø 7 T</th><th class="p2">Befüllt</th><th class="p3">Anteil</th></tr></thead>';
+      '<th>' + (d.isToday ? 'Heute' : 'Tag') + '</th><th class="p3">Vortag</th><th class="p3">Ø 7 T</th><th class="p2">Befüllt</th><th class="p3">Anteil</th></tr></thead>';
     var body = d.silos.map(function (s) {
       [1, 2, 3].forEach(function (i) { tot[i] += s.shifts[i]; });
       var share = sumDay > 0.05 ? s.consDay / sumDay * 100 : 0;
-      return '<tr><td class="name"><i class="dot" style="background:' + (matColor[s.material] || '#c9cacb') + '"></i>' + esc(s.name) + '</td>' +
+      return '<tr data-pos="' + s.pos + '"><td class="name"><i class="dot" style="background:' + (matColor[s.material] || '#c9cacb') + '"></i>' + esc(s.name) + '</td>' +
         '<td class="p4" style="text-align:left">' + chip(s.material) + '</td>' +
         [1, 2, 3].map(function (i) { return td(s.shifts[i], sp(i)); }).join('') +
         td(s.consDay, 'strong') + td(s.consPrev, 'p3') + (s.avg7 == null ? '<td class="zero p3">–</td>' : td(s.avg7, 'p3')) + td(s.fillDay, 'p2') +
@@ -364,18 +431,20 @@
 
     // ---- Tabelle Material ----
     var mrows = d.materials.slice().sort(function (a, b) { return a.material < b.material ? -1 : 1; });
-    var mt = { tons: 0, cs: 0, cd: 0, avg: 0 };
+    var mt = { tons: 0, cs: 0, cd: 0, avg: 0 }, matShift = {};
+    d.silos.forEach(function (s) { if (s.material) matShift[s.material] = (matShift[s.material] || 0) + s.shifts[cur]; });
     document.getElementById('tblMat').innerHTML =
-      '<thead><tr><th>Material</th><th class="p4" style="text-align:left">Silos</th><th>Bestand</th><th class="p2">Schicht</th><th>Heute</th><th class="p2">Ø/Tag</th><th>Reichweite</th></tr></thead><tbody>' +
+      '<thead><tr><th>Material</th><th class="p4" style="text-align:left">Silos</th><th>Bestand</th><th class="p2 cur">' + d.shiftNames[cur] + '</th><th>' + (d.isToday ? 'Heute' : 'Tag') + '</th><th class="p2">Ø/Tag</th><th>Reichweite</th></tr></thead><tbody>' +
       (mrows.length ? mrows.map(function (m) {
+        m.consShift = matShift[m.material] || 0;
         mt.tons += m.tons; mt.cs += m.consShift; mt.cd += m.consDay; mt.avg += (m.avg7 || 0);
         return '<tr><td class="name"><i class="dot" style="background:' + matColor[m.material] + '"></i>' + esc(m.material) + '</td>' +
           '<td class="p4 muted" style="text-align:left">' + esc(m.silos.map(function (x) { return x.replace(/^Silo\s*/i, ''); }).join(', ')) + '</td>' +
-          td(m.tons, 'strong') + td(m.consShift, 'p2') + td(m.consDay) +
+          td(m.tons, 'strong') + td(m.consShift, 'p2 cur') + td(m.consDay) +
           (m.avg7 == null ? '<td class="zero p2">–</td>' : td(m.avg7, 'p2')) +
           '<td class="' + reachCls(m.reach) + '">' + reachTxt(m.reach) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">Keine Materialdaten</td></tr>') + '</tbody>' +
-      '<tfoot><tr><td>Summe</td><td class="p4"></td><td>' + t(mt.tons) + '</td><td class="p2">' + t(mt.cs) + '</td><td>' + t(mt.cd) + '</td><td class="p2">' + t(mt.avg) + '</td><td></td></tr></tfoot>';
+      '<tfoot><tr><td>Summe</td><td class="p4"></td><td>' + t(mt.tons) + '</td><td class="p2 cur">' + t(mt.cs) + '</td><td>' + t(mt.cd) + '</td><td class="p2">' + t(mt.avg) + '</td><td></td></tr></tfoot>';
 
     renderChart(d.history);
     renderFills(d.fills);
@@ -426,10 +495,10 @@
 
   function renderFills(f) {
     var sum = f.filter(function (x) { return x.today; }).reduce(function (a, x) { return a + x.tons; }, 0);
-    var html = '<h4>Befüllungen heute <span>+' + t(sum) + ' t</span></h4><div class="list">';
-    if (!f.length) html += '<div class="empty">Keine Befüllungen seit gestern</div>';
+    var html = '<h4>Befüllungen ' + (data.isToday ? 'heute' : dmy(data.day)) + ' <span>+' + t(sum) + ' t</span></h4><div class="list">';
+    if (!f.length) html += '<div class="empty">Keine Befüllungen</div>';
     html += f.slice(0, 20).map(function (x) {
-      var when = (x.today ? '' : 'gestern ') + hm(x.start) + (x.end - x.start > 60 ? '–' + hm(x.end) : '');
+      var when = (x.today ? '' : 'Vortag ') + hm(x.start) + (x.end - x.start > 60 ? '–' + hm(x.end) : '');
       return '<div class="row' + (x.today ? '' : ' old') + '"><span>' + when + '</span><span>' + esc(x.silo) +
         (x.running ? ' <span class="live-dot">● läuft</span>' : '') + '</span><span class="t">+' + t(x.tons) + ' t</span></div>';
     }).join('');
@@ -449,20 +518,270 @@
     var lo = new Date(lastOk);
     document.getElementById('updated').textContent = 'Stand ' + pad(lo.getDate()) + '.' + pad(lo.getMonth() + 1) + '. ' + pad(lo.getHours()) + ':' + pad(lo.getMinutes());
     if (age > Math.max(60, data.refresh * 4)) { live.textContent = '● Offline'; live.className = 'live off'; }
+    else if (!data.isToday) { live.textContent = 'Rückschau'; live.className = 'live hist'; }
     else { live.textContent = '● Live'; live.className = 'live'; }
+    if ((selShift || selDay || mPos != null) && Date.now() - lastTouch > IDLE_MS) { selShift = null; selDay = null; closeSilo(); load(); }
   }
 
-  function poll() {
-    fetch(location.pathname + '?data=1', { cache: 'no-store', credentials: 'same-origin' })
+  var loadSeq = 0;
+  function load() {
+    var seq = ++loadSeq;
+    return fetch(location.pathname + '?data=1' + (selDay ? '&day=' + selDay : ''), { cache: 'no-store', credentials: 'same-origin' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function (j) { data = j; lastOk = Date.now(); render(); })
-      .catch(function () { /* Anzeige bleibt stehen, Hinweis über tick() */ })
-      .then(function () { setTimeout(poll, (data.refresh || 10) * 1000); });
+      .then(function (j) { if (seq === loadSeq) { data = j; lastOk = Date.now(); render(); tick(); } })
+      .catch(function () { /* Anzeige bleibt stehen, Hinweis über tick() */ });
   }
+  var pollN = 0;
+  function poll() {
+    pollN++;
+    var jobs = [load()];
+    if (mPos != null && pollN % 3 === 0) jobs.push(loadSilo());   // Popup seltener nachladen
+    Promise.all(jobs).then(function () { setTimeout(poll, (data.refresh || 10) * 1000); });
+  }
+
+
+  // ================= Silo-Detail-Popup =================
+  var modal = document.getElementById('modal'), mbox = document.getElementById('mbox');
+  var mPos = null, mRange = 7, mData = null;
+  var SHIFT_COL = { 1: '#9cc3ef', 2: '#2a78d6', 3: '#184f95' };   // Früh hell → Nacht dunkel
+
+  function openSilo(pos) {
+    mPos = pos; mData = null; lastTouch = Date.now();
+    modal.classList.add('open');
+    mbox.innerHTML = '<div class="loading">Lade Verlauf …</div>';
+    loadSilo();
+  }
+  function closeSilo() { mPos = null; mData = null; modal.classList.remove('open'); hideTip(); }
+  function loadSilo() {
+    if (mPos == null) return Promise.resolve();
+    var pos = mPos, range = mRange;
+    return fetch(location.pathname + '?silo=' + pos + '&range=' + range, { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (pos === mPos && range === mRange) { mData = j; renderSilo(); } })
+      .catch(function () { if (!mData) mbox.innerHTML = '<div class="loading">Daten konnten nicht geladen werden.</div>'; });
+  }
+  function hideTip() { document.getElementById('tip').style.display = 'none'; }
+  function showTip(e, html) {
+    var tip = document.getElementById('tip');
+    tip.innerHTML = html; tip.style.display = 'block';
+    var x = e.clientX + 14, y = e.clientY + 14;
+    if (x + 220 > window.innerWidth) x = e.clientX - 230;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  function dt(ts) { var d = new Date(ts * 1000); return wd(d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())) + ' ' + pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '. ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function dur(sec) { var m = Math.round(sec / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; }
+  function niceStep(max, n) { var raw = Math.max(max, 1) / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag; return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10) * mag; }
+
+  function renderSilo() {
+    var m = mData;
+    if (!m || m.error) { mbox.innerHTML = '<div class="loading">' + esc(m ? m.error : 'Keine Daten') + '</div>'; return; }
+    var fillSum = m.fills.reduce(function (a, f) { return a + f.tons; }, 0);
+    var status = m.percent < data.critical ? 'r' : (m.percent < data.warn ? 'o' : 'g');
+    var gaps = [];
+    for (var i = 1; i < m.fills.length; i++) gaps.push(m.fills[i - 1].start - m.fills[i].start);
+    var avgGap = gaps.length ? gaps.reduce(function (a, b) { return a + b; }, 0) / gaps.length : null;
+    var rangeTxt = { 1: '24 h', 7: '7 Tage', 30: '30 Tage' };
+
+    mbox.innerHTML =
+      '<div class="mhead"><h2>' + esc(m.name) + ' ' + chip(m.material) + '</h2>' +
+      '<div class="seg" id="mrange">' + [1, 7, 30].map(function (r) { return '<span data-r="' + r + '" class="' + (r === m.range ? 'on' : '') + '">' + rangeTxt[r] + '</span>'; }).join('') + '</div>' +
+      '<button class="x" id="mclose" title="Schließen (Esc)">×</button></div>' +
+
+      '<div class="mkpis">' +
+        '<div class="mk"><div class="l">Bestand jetzt</div><div class="v">' + t(m.tons) + '<u>t</u></div><div class="s"><b class="' + status + '">' + nf1.format(m.percent) + ' %</b>' + (m.capacity ? ' von ' + nf0.format(m.capacity) + ' t' : '') + '</div></div>' +
+        '<div class="mk"><div class="l">Ø Verbrauch / Tag</div><div class="v">' + (m.avg.day == null ? '–' : t(m.avg.day) + '<u>t</u>') + '</div><div class="s">' +
+          [1, 2, 3].map(function (i) { return m.shiftNames[i] + ' <b>' + (m.avg['s' + i] == null ? '–' : t(m.avg['s' + i])) + '</b>'; }).join(' · ') + (m.avgDays ? ' · ' + m.avgDays + ' Tage' : '') + '</div></div>' +
+        '<div class="mk"><div class="l">Befüllungen (' + rangeTxt[m.range] + ')</div><div class="v">' + m.fills.length + '<u>× · ' + t(fillSum) + ' t</u></div><div class="s">' +
+          (m.fills.length ? 'Ø <b>' + t(fillSum / m.fills.length) + ' t</b>' + (avgGap ? ' · alle <b>' + (avgGap > 86400 ? nf1.format(avgGap / 86400) + ' Tage' : dur(avgGap)) + '</b>' : '') : 'keine im Zeitraum') + '</div></div>' +
+        '<div class="mk"><div class="l">Prognose (Ø-Verbrauch)</div><div class="v" style="font-size:1.25rem;padding:.35rem 0">' +
+          (m.forecast.warn ? '<span class="o">Warnschwelle ' + dt(m.forecast.warn) + '</span>' : (m.forecast.empty ? '<span class="o">unter Warnschwelle</span>' : '–')) + '</div><div class="s">' +
+          (m.forecast.empty ? 'leer ca. <b class="r">' + dt(m.forecast.empty) + '</b>' : 'zu wenig Verbrauchsdaten') + '</div></div>' +
+      '</div>' +
+
+      '<div class="mgrid">' +
+        '<div class="mpanel wide"><h4>Füllstandsverlauf<span class="legend"><span><i style="background:var(--primary)"></i>Füllstand</span><span><i style="background:var(--fill);height:10px;opacity:.35"></i>Befüllung</span><span><i style="background:var(--warning)"></i>Warnschwelle</span></span></h4><div class="mchart" id="mLine"></div></div>' +
+        '<div class="mpanel"><h4>Verbrauch je Tag &amp; Schicht<span class="legend">' + [1, 2, 3].map(function (i) { return '<span><i style="background:' + SHIFT_COL[i] + ';height:10px"></i>' + m.shiftNames[i] + '</span>'; }).join('') + '<span><i style="background:var(--fill);height:10px"></i>Befüllung</span></span></h4><div class="mchart" id="mBars"></div></div>' +
+        '<div class="mpanel"><h4>Befüllungen<small style="font-weight:400;color:var(--text-2);font-size:.85rem">' + rangeTxt[m.range] + '</small></h4><div class="scroll" style="max-height:260px"><table id="mFills"></table></div></div>' +
+      '</div>';
+
+    drawLine(document.getElementById('mLine'), m);
+    drawBars(document.getElementById('mBars'), m);
+
+    document.getElementById('mFills').innerHTML = m.fills.length ?
+      '<thead><tr><th>Datum</th><th>Zeit</th><th class="p2">Dauer</th><th>Menge</th></tr></thead><tbody>' +
+      m.fills.map(function (f) {
+        var d0 = new Date(f.start * 1000);
+        return '<tr><td>' + wd(d0.getFullYear() + '-' + pad(d0.getMonth() + 1) + '-' + pad(d0.getDate())) + ' ' + pad(d0.getDate()) + '.' + pad(d0.getMonth() + 1) + '.</td>' +
+          '<td>' + hm(f.start) + (f.end - f.start > 60 ? '–' + hm(f.end) : '') + (f.running ? ' <span class="live-dot">● läuft</span>' : '') + '</td>' +
+          '<td class="p2">' + (f.end - f.start > 60 ? dur(f.end - f.start) : '–') + '</td><td class="strong">+' + t(f.tons) + '</td></tr>';
+      }).join('') + '</tbody><tfoot><tr><td>Summe</td><td></td><td class="p2"></td><td>+' + t(fillSum) + '</td></tr></tfoot>'
+      : '<tbody><tr><td class="empty">Keine Befüllungen im Zeitraum</td></tr></tbody>';
+  }
+
+  function drawLine(el, m) {
+    if (!m.archived) {
+      el.innerHTML = '<div class="hint"><b>Füllstandsverlauf nicht verfügbar:</b> Die Tonnen-Variable (#' + m.varTons + ') wird nicht archiviert.<br>' +
+        'In der Symcon-Konsole: Variable auswählen → <b>Archivierung</b> aktivieren (Aggregationstyp „Standard“). Der Verlauf füllt sich ab dann automatisch.</div>';
+      return;
+    }
+    var W = el.clientWidth || 900, H = Math.max(220, Math.min(320, Math.round(window.innerHeight * 0.3))), padL = 52, padR = 12, padT = 22, padB = 26;
+    var pts = m.series, agg = pts.length && pts[0].length > 2;
+    var maxV = m.capacity || 0;
+    pts.forEach(function (p) { maxV = Math.max(maxV, agg ? p[3] : p[1]); });
+    var step = niceStep(maxV, 4), yMax = Math.ceil(maxV / step) * step || step;
+    var x0 = m.start, x1 = m.now;
+    function X(ts) { return padL + (W - padL - padR) * (ts - x0) / (x1 - x0); }
+    function Y(v) { return padT + (H - padT - padB) * (1 - v / yMax); }
+    var svg = '<svg width="' + W + '" height="' + H + '" font-family="inherit">';
+    // Raster + y-Achse
+    for (var v = 0; v <= yMax + 1e-9; v += step) {
+      svg += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? '#d5d8dc' : '#eceef1') + '"' + (v ? ' stroke-dasharray="4 4"' : '') + '/>' +
+        '<text x="' + (padL - 8) + '" y="' + (Y(v) + 4) + '" fill="#a2a3a5" font-size="11" text-anchor="end">' + nf0.format(v) + ' t</text>';
+    }
+    // x-Achse
+    var d = new Date(x0 * 1000), ticks = [];
+    if (m.range === 1) { d.setMinutes(0, 0, 0); d.setHours(Math.ceil(d.getHours() / 3) * 3); while (d.getTime() / 1000 <= x1) { ticks.push([d.getTime() / 1000, pad(d.getHours()) + ':00']); d.setHours(d.getHours() + 3); } }
+    else { d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); var every = m.range > 7 ? 5 : 1;
+      while (d.getTime() / 1000 <= x1) { if ((d.getDate() - 1) % every === 0 || every === 1) ticks.push([d.getTime() / 1000, (every === 1 ? ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()] + ' ' : '') + d.getDate() + '.' + (every > 1 ? (d.getMonth() + 1) + '.' : '')]); d.setDate(d.getDate() + 1); } }
+    ticks.forEach(function (tk) {
+      svg += '<line x1="' + X(tk[0]) + '" x2="' + X(tk[0]) + '" y1="' + padT + '" y2="' + (H - padB) + '" stroke="#f3f4f6"/>' +
+        '<text x="' + X(tk[0]) + '" y="' + (H - 7) + '" fill="#a2a3a5" font-size="11" text-anchor="middle">' + tk[1] + '</text>';
+    });
+    // Befüllungen als Bänder
+    var lastLbl = -1e9;
+    m.fills.slice().reverse().forEach(function (f) {
+      var a = X(Math.max(x0, f.start - 120)), b = Math.max(a + 4, X(Math.min(x1, f.end)));
+      svg += '<rect x="' + a + '" y="' + padT + '" width="' + (b - a) + '" height="' + (H - padT - padB) + '" fill="#eb6834" fill-opacity=".14"/>';
+      var cx = (a + b) / 2;
+      if (cx - lastLbl > 46) { svg += '<text x="' + cx + '" y="' + (padT - 7) + '" fill="#d4561f" font-size="11" font-weight="500" text-anchor="middle">+' + nf0.format(f.tons) + ' t</text>'; lastLbl = cx; }
+    });
+    // Schwellen
+    [[m.warnT, '#e28310', 'Warnung'], [m.critT, '#d03b3b', 'Kritisch']].forEach(function (th) {
+      if (th[0] == null) return;
+      svg += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(th[0]) + '" y2="' + Y(th[0]) + '" stroke="' + th[1] + '" stroke-width="1.5" stroke-dasharray="6 4"/>' +
+        '<text x="' + (W - padR - 4) + '" y="' + (Y(th[0]) - 4) + '" fill="' + th[1] + '" font-size="11" text-anchor="end" stroke="#fff" stroke-width="4" paint-order="stroke">' + th[2] + ' ' + nf0.format(th[0]) + ' t</text>';
+    });
+    if (pts.length) {
+      // Min/Max-Band (Stundenwerte)
+      if (agg) {
+        svg += '<path d="M' + pts.map(function (p) { return X(p[0]) + ',' + Y(p[3]); }).join(' L') + ' L' + pts.slice().reverse().map(function (p) { return X(p[0]) + ',' + Y(p[2]); }).join(' L') + ' Z" fill="#0075bb" fill-opacity=".10"/>';
+      }
+      // Linie (24 h: Stufen, da Archiv nur Änderungen speichert)
+      var line = '';
+      pts.forEach(function (p, i) {
+        if (i === 0) line += 'M' + X(p[0]) + ',' + Y(p[1]);
+        else if (!agg) line += ' H' + X(p[0]) + ' V' + Y(p[1]);
+        else line += ' L' + X(p[0]) + ',' + Y(p[1]);
+      });
+      svg += '<path d="' + line + ' V' + Y(0) + ' H' + X(pts[0][0]) + ' Z" fill="#0075bb" fill-opacity=".06"/>';
+      svg += '<path d="' + line + '" fill="none" stroke="#0075bb" stroke-width="2" stroke-linejoin="round"/>';
+      var lp = pts[pts.length - 1];
+      svg += '<circle cx="' + X(lp[0]) + '" cy="' + Y(lp[1]) + '" r="4.5" fill="#0075bb" stroke="#fff" stroke-width="2"/>';
+    } else {
+      svg += '<text x="' + (W / 2) + '" y="' + (H / 2) + '" fill="#a7a8a9" font-size="13" text-anchor="middle">Noch keine Archivwerte im Zeitraum</text>';
+    }
+    svg += '<line id="mCross" x1="0" x2="0" y1="' + padT + '" y2="' + (H - padB) + '" stroke="#53565a" stroke-width="1" visibility="hidden"/>' +
+      '<circle id="mDot" r="5" fill="#0075bb" stroke="#fff" stroke-width="2" visibility="hidden"/>' +
+      '<rect id="mHit" x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '" fill="transparent"/></svg>';
+    el.innerHTML = svg;
+    if (!pts.length) return;
+    var hit = el.querySelector('#mHit'), cross = el.querySelector('#mCross'), dot = el.querySelector('#mDot'), svgEl = el.querySelector('svg');
+    hit.addEventListener('mousemove', function (e) {
+      var r = svgEl.getBoundingClientRect(), ts = x0 + (e.clientX - r.left - padL) / (W - padL - padR) * (x1 - x0);
+      var lo = 0, hi = pts.length - 1;
+      while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (pts[mid][0] <= ts) lo = mid; else hi = mid; }
+      var p = agg ? (Math.abs(pts[hi][0] - ts) < Math.abs(pts[lo][0] - ts) ? pts[hi] : pts[lo]) : (pts[hi][0] <= ts ? pts[hi] : pts[lo]);
+      var shownTs = agg ? p[0] : ts;
+      cross.setAttribute('x1', X(shownTs)); cross.setAttribute('x2', X(shownTs)); cross.setAttribute('visibility', 'visible');
+      dot.setAttribute('cx', X(shownTs)); dot.setAttribute('cy', Y(p[1])); dot.setAttribute('visibility', 'visible');
+      var fill = m.fills.filter(function (f) { return shownTs >= f.start - 120 && shownTs <= f.end + 60; })[0];
+      showTip(e, '<b>' + dt(shownTs) + (agg ? ' (Ø Stunde)' : '') + '</b><br>Füllstand: ' + t(p[1]) + ' t' + (m.capacity ? ' (' + nf0.format(p[1] / m.capacity * 100) + ' %)' : '') +
+        (agg ? '<br><span style="color:#a7a8a9">min ' + t(p[2]) + ' · max ' + t(p[3]) + ' t</span>' : '') +
+        (fill ? '<br><span style="color:#d4561f">Befüllung +' + t(fill.tons) + ' t</span>' : ''));
+    });
+    hit.addEventListener('mouseleave', function () { cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); hideTip(); });
+  }
+
+  function drawBars(el, m) {
+    var rows = m.days, W = el.clientWidth || 600, H = 230, padL = 46, padB = 24, padT = 8;
+    var max = 0;
+    rows.forEach(function (r) { max = Math.max(max, r.s1 + r.s2 + r.s3, r.c, r.f); });
+    var step = niceStep(max, 4), yMax = Math.ceil(max / step) * step || step;
+    var plotH = H - padB - padT, slot = (W - padL) / rows.length, bw = Math.max(3, Math.min(16, (slot - 6) / 2));
+    var every = slot < 22 ? Math.ceil(22 / slot) * (slot < 12 ? 2 : 1) : 1;
+    var svg = '<svg width="' + W + '" height="' + H + '" font-family="inherit">';
+    for (var v = 0; v <= yMax + 1e-9; v += step) {
+      var y = padT + plotH * (1 - v / yMax);
+      svg += '<line x1="' + padL + '" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="' + (v === 0 ? '#d5d8dc' : '#eceef1') + '"' + (v ? ' stroke-dasharray="4 4"' : '') + '/>' +
+        '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" fill="#a2a3a5" font-size="11" text-anchor="end">' + nf0.format(v) + ' t</text>';
+    }
+    var base = padT + plotH;
+    rows.forEach(function (r, i) {
+      var cx = padL + slot * i + slot / 2, bx = cx - bw - 1, yTop = base, segs = [1, 2, 3].filter(function (k) { return r['s' + k] > 0.01; });
+      // gestapelt: Früh unten, Nacht oben; 2 px Lücke zwischen Segmenten
+      segs.forEach(function (k, j) {
+        var h = plotH * r['s' + k] / yMax, isTop = j === segs.length - 1, gap = j > 0 ? 2 : 0;
+        if (h - gap < 0.5) { yTop -= h; return; }
+        var y0 = yTop - h, rr = isTop ? Math.min(4, h - gap, bw / 2) : 0;
+        svg += '<path d="M' + bx + ',' + (yTop - gap) + ' V' + (y0 + rr) + (rr ? ' Q' + bx + ',' + y0 + ' ' + (bx + rr) + ',' + y0 + ' H' + (bx + bw - rr) + ' Q' + (bx + bw) + ',' + y0 + ' ' + (bx + bw) + ',' + (y0 + rr) : ' H' + (bx + bw)) + ' V' + (yTop - gap) + ' Z" fill="' + SHIFT_COL[k] + '"/>';
+        yTop = y0;
+      });
+      var fh = plotH * r.f / yMax;
+      if (fh > 0.5) { var fx = cx + 1, rr2 = Math.min(4, fh, bw / 2);
+        svg += '<path d="M' + fx + ',' + base + ' V' + (base - fh + rr2) + ' Q' + fx + ',' + (base - fh) + ' ' + (fx + rr2) + ',' + (base - fh) + ' H' + (fx + bw - rr2) + ' Q' + (fx + bw) + ',' + (base - fh) + ' ' + (fx + bw) + ',' + (base - fh + rr2) + ' V' + base + ' Z" fill="var(--fill)"/>'; }
+      var isToday = i === rows.length - 1;
+      if (isToday || (rows.length - 1 - i) % every === 0) {
+        svg += '<text x="' + cx + '" y="' + (H - 6) + '" fill="' + (isToday ? '#0075bb' : '#a2a3a5') + '" font-size="11" text-anchor="middle"' + (isToday ? ' font-weight="500"' : '') + '>' +
+          (isToday ? 'Heute' : (rows.length > 10 ? r.day.slice(8) + '.' : wd(r.day) + ' ' + r.day.slice(8) + '.')) + '</text>';
+      }
+      svg += '<rect class="bh" data-i="' + i + '" x="' + (cx - slot / 2) + '" y="0" width="' + slot + '" height="' + H + '" fill="transparent"/>';
+    });
+    el.innerHTML = svg + '</svg>';
+    Array.prototype.forEach.call(el.querySelectorAll('.bh'), function (h) {
+      h.addEventListener('mousemove', function (e) {
+        var r = rows[+h.getAttribute('data-i')];
+        showTip(e, '<b>' + wd(r.day) + ', ' + dmy(r.day) + '</b><br>' +
+          [1, 2, 3].map(function (k) { return '<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:' + SHIFT_COL[k] + ';margin-right:5px"></i>' + m.shiftNames[k] + ': ' + t(r['s' + k]) + ' t'; }).join('<br>') +
+          '<br><b>Verbrauch: ' + t(r.c) + ' t</b><br><span style="color:#d4561f">Befüllung: ' + t(r.f) + ' t</span>');
+      });
+      h.addEventListener('mouseleave', hideTip);
+    });
+  }
+
+  document.getElementById('silos').addEventListener('click', function (e) { var c = e.target.closest('[data-pos]'); if (c) openSilo(+c.getAttribute('data-pos')); });
+  document.getElementById('tblSilo').addEventListener('click', function (e) { var c = e.target.closest('tr[data-pos]'); if (c) openSilo(+c.getAttribute('data-pos')); });
+  modal.addEventListener('click', function (e) {
+    lastTouch = Date.now();
+    if (e.target === modal || e.target.id === 'mclose') { closeSilo(); return; }
+    var r = e.target.closest('[data-r]');
+    if (r) { mRange = +r.getAttribute('data-r'); loadSilo(); }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && mPos != null) closeSilo(); });
+
+  // Schicht wählen
+  document.getElementById('shiftseg').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-s]'); if (!el) return;
+    var i = +el.getAttribute('data-s');
+    lastTouch = Date.now();
+    selShift = (data.isToday && i === data.shift.shift) ? null : i;
+    render();
+  });
+  // Tag wechseln
+  document.getElementById('pday').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-nav]'); if (!b || b.disabled) return;
+    var n = +b.getAttribute('data-nav');
+    lastTouch = Date.now();
+    if (n === 0) { selDay = null; selShift = null; }
+    else {
+      var nd = addDays(data.day, n);
+      selDay = nd >= data.today ? null : nd;
+    }
+    load();
+  });
 
   // Diagramm bei Größenänderung neu zeichnen
   var rt;
-  window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { render(); }, 150); });
+  window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { render(); if (mData) renderSilo(); }, 150); });
 
   render(); tick();
   setInterval(tick, 1000);

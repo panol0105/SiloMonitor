@@ -17,7 +17,8 @@ class SiloMonitor extends IPSModule
 {
     private const MAX_SILOS = 12;
     private const WEBHOOK_MODULE = '{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}';
-    private const TREND_SECONDS = 600; // Pfeil "befüllt/entnimmt" bleibt 10 min sichtbar
+    private const TREND_SECONDS = 600;
+    private const ARCHIVE_MODULE = '{43192F0B-135B-4CE7-A0A7-1475603F3060}'; // Pfeil "befüllt/entnimmt" bleibt 10 min sichtbar
 
     public function Create()
     {
@@ -279,9 +280,21 @@ class SiloMonitor extends IPSModule
             readfile($file);
             return;
         }
+        if (isset($_GET['silo'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            $range = (int) ($_GET['range'] ?? 7);
+            echo json_encode($this->SiloDetail((int) $_GET['silo'], in_array($range, [1, 7, 30], true) ? $range : 7), JSON_HEX_TAG | JSON_HEX_AMP);
+            return;
+        }
         if (isset($_GET['data'])) {
             header('Content-Type: application/json; charset=utf-8');
             header('Cache-Control: no-store');
+            $day = (string) ($_GET['day'] ?? '');
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) && $day < $this->ShiftInfo(time())['day']) {
+                echo json_encode($this->BuildData($day), JSON_HEX_TAG | JSON_HEX_AMP); // Rückschau
+                return;
+            }
             echo $this->CachedJson();
             return;
         }
@@ -424,13 +437,16 @@ class SiloMonitor extends IPSModule
     // Dashboard-Daten
     // ------------------------------------------------------------------
 
-    private function BuildData(): array
+    /** @param string|null $viewDay Produktionstag (Y-m-d) für die Rückschau, null = heute */
+    private function BuildData(?string $viewDay = null): array
     {
         $now = time();
         $info = $this->ShiftInfo($now);
         $stats = $this->GetStats();
         $state = $this->GetState();
-        $day = $info['day'];
+        $liveDay = $info['day'];
+        $day = $viewDay ?? $liveDay;
+        $isToday = $day === $liveDay;
 
         // Produktionstage: heute + 7 zurück
         $days = [];
@@ -474,7 +490,7 @@ class SiloMonitor extends IPSModule
             $basis = $avg7; // Reichweite = Bestand / Ø-Tagesverbrauch der letzten 7 Produktionstage
 
             $trend = 0;
-            if (isset($state[$k]['ts']) && $now - (int) $state[$k]['ts'] < self::TREND_SECONDS) {
+            if ($isToday && isset($state[$k]['ts']) && $now - (int) $state[$k]['ts'] < self::TREND_SECONDS) {
                 $trend = (int) $state[$k]['dir'];
             }
 
@@ -537,19 +553,26 @@ class SiloMonitor extends IPSModule
             if ($e['end'] < $from) {
                 break;
             }
+            if ($this->ShiftInfo((int) $e['start'])['day'] > $day) {
+                continue; // liegt nach dem angezeigten Tag
+            }
             $fills[] = [
                 'silo'    => $names[$e['s']] ?? ('Silo ' . $e['s']),
                 'pos'     => $e['s'],
                 'start'   => $e['start'],
                 'end'     => $e['end'],
                 'tons'    => round((float) $e['t'], 2),
-                'running' => ($now - $e['end']) < self::TREND_SECONDS,
+                'running' => $isToday && ($now - $e['end']) < self::TREND_SECONDS,
                 'today'   => $this->ShiftInfo((int) $e['start'])['day'] === $day,
             ];
         }
 
         return [
             'title'      => $this->ReadPropertyString('Title'),
+            'today'      => $liveDay,
+            'isToday'    => $isToday,
+            'minDay'     => date('Y-m-d', strtotime($liveDay . ' 12:00 -' . $this->ReadPropertyInteger('HistoryDays') . ' days')),
+            'shiftTimes' => $this->ShiftTimes(),
             'now'        => $now,
             'day'        => $day,
             'shift'      => $info,
@@ -562,6 +585,151 @@ class SiloMonitor extends IPSModule
             'history'    => $history,
             'fills'      => $fills,
         ];
+    }
+
+    /**
+     * Detaildaten eines Silos für das Popup: Füllstandsverlauf (aus dem Symcon-Archiv),
+     * Verbrauch je Tag und Schicht, Befüllungen und Prognose.
+     */
+    private function SiloDetail(int $pos, int $days): array
+    {
+        $silo = null;
+        foreach ($this->GetSilos() as $s) {
+            if ($s['Pos'] === $pos) {
+                $silo = $s;
+            }
+        }
+        if ($silo === null) {
+            return ['error' => 'Silo nicht gefunden'];
+        }
+        $k = (string) $pos;
+        $now = time();
+        $info = $this->ShiftInfo($now);
+        $stats = $this->GetStats();
+        $start = $now - $days * 86400;
+
+        // Aktueller Stand
+        $tons = (float) $this->ReadVar($silo['VarTons'], 0.0);
+        $pct = $this->ReadVar($silo['VarPercent'], null);
+        $cap = (float) $silo['Capacity'];
+        if ($cap <= 0 && $pct !== null && (float) $pct > 2) {
+            $cap = $tons / ((float) $pct / 100);
+        }
+        if ($pct === null) {
+            $pct = $cap > 0 ? $tons / $cap * 100 : 0;
+        }
+
+        // Tage (mindestens 7 für die Balken)
+        $barDays = max(7, $days);
+        $dayRows = [];
+        for ($i = $barDays - 1; $i >= 0; $i--) {
+            $d = date('Y-m-d', strtotime($info['day'] . ' 12:00 -' . $i . ' days'));
+            $row = ['day' => $d, 'c' => (float) ($stats['D'][$d][$k]['c'] ?? 0), 'f' => (float) ($stats['D'][$d][$k]['f'] ?? 0), 'has' => isset($stats['D'][$d][$k])];
+            for ($sh = 1; $sh <= 3; $sh++) {
+                $row['s' . $sh] = (float) ($stats['S'][$d . '|' . $sh][$k]['c'] ?? 0);
+            }
+            $dayRows[] = $row;
+        }
+
+        // Durchschnitt der abgeschlossenen Tage (ohne heute) im gewählten Zeitraum, mind. 7
+        $done = array_values(array_filter(array_slice($dayRows, 0, -1), fn ($r) => $r['has']));
+        $n = count($done);
+        $avg = ['day' => null, 's1' => null, 's2' => null, 's3' => null];
+        if ($n > 0) {
+            foreach (['c' => 'day', 's1' => 's1', 's2' => 's2', 's3' => 's3'] as $f => $key) {
+                $avg[$key] = round(array_sum(array_column($done, $f)) / $n, 2);
+            }
+        }
+
+        // Befüllungen des Silos im Zeitraum
+        $fills = [];
+        foreach (json_decode($this->ReadAttributeString('Events'), true) ?: [] as $e) {
+            if ($e['s'] === $pos && $e['end'] >= $start) {
+                $fills[] = ['start' => $e['start'], 'end' => $e['end'], 'tons' => round((float) $e['t'], 2), 'running' => ($now - $e['end']) < self::TREND_SECONDS];
+            }
+        }
+
+        // Füllstandsverlauf aus dem Archiv
+        $series = [];
+        $archived = false;
+        $acIDs = IPS_GetInstanceListByModuleID(self::ARCHIVE_MODULE);
+        $var = $silo['VarTons'];
+        if (count($acIDs) > 0 && $var > 0 && IPS_VariableExists($var) && @AC_GetLoggingStatus($acIDs[0], $var)) {
+            $archived = true;
+            $ac = $acIDs[0];
+            if ($days <= 1) {
+                $before = @AC_GetLoggedValues($ac, $var, 0, $start - 1, 1) ?: [];
+                if (count($before) > 0) {
+                    $series[] = [$start, round((float) $before[0]['Value'], 2)];
+                }
+                foreach (array_reverse(@AC_GetLoggedValues($ac, $var, $start, $now, 5000) ?: []) as $v) {
+                    $series[] = [(int) $v['TimeStamp'], round((float) $v['Value'], 2)];
+                }
+                $series[] = [$now, round($tons, 2)];
+                $series = $this->Downsample($series, 1500);
+            } else {
+                // Stundenwerte: Mittel + Min/Max
+                foreach (array_reverse(@AC_GetAggregatedValues($ac, $var, 0, $start, $now, 0) ?: []) as $v) {
+                    $series[] = [(int) $v['TimeStamp'] + 1800, round((float) $v['Avg'], 2), round((float) $v['Min'], 2), round((float) $v['Max'], 2)];
+                }
+                $series[] = [$now, round($tons, 2), round($tons, 2), round($tons, 2)];
+            }
+        }
+
+        // Prognose auf Basis des Ø-Tagesverbrauchs
+        $warnT = $cap > 0 ? $cap * $this->ReadPropertyInteger('WarnLevel') / 100 : null;
+        $rate = ($avg['day'] ?? 0) > 0.05 ? $avg['day'] / 86400 : null; // t pro Sekunde
+        $forecast = [
+            'empty' => $rate ? $now + (int) ($tons / $rate) : null,
+            'warn'  => ($rate && $warnT !== null && $tons > $warnT) ? $now + (int) (($tons - $warnT) / $rate) : null,
+        ];
+
+        return [
+            'pos'        => $pos,
+            'name'       => $silo['Name'],
+            'material'   => trim((string) $this->ReadVar($silo['VarMaterial'], '')),
+            'tons'       => round($tons, 2),
+            'percent'    => round(max(0, min(100, (float) $pct)), 1),
+            'capacity'   => $cap > 0 ? round($cap, 1) : null,
+            'warnT'      => $warnT !== null ? round($warnT, 1) : null,
+            'critT'      => $cap > 0 ? round($cap * $this->ReadPropertyInteger('CriticalLevel') / 100, 1) : null,
+            'range'      => $days,
+            'start'      => $start,
+            'now'        => $now,
+            'archived'   => $archived,
+            'varTons'    => $var,
+            'series'     => $series,
+            'days'       => $dayRows,
+            'avg'        => $avg,
+            'avgDays'    => $n,
+            'fills'      => array_reverse($fills),
+            'forecast'   => $forecast,
+            'shiftNames' => [1 => 'Früh', 2 => 'Spät', 3 => 'Nacht'],
+            'shiftTimes' => $this->ShiftTimes(),
+        ];
+    }
+
+    /** Reduziert eine Zeitreihe auf max. $max Punkte (Min/Max je Eimer bleiben erhalten) */
+    private function Downsample(array $points, int $max): array
+    {
+        $n = count($points);
+        if ($n <= $max) {
+            return $points;
+        }
+        $bucket = (int) ceil($n / ($max / 2));
+        $out = [$points[0]];
+        for ($i = 1; $i < $n - 1; $i += $bucket) {
+            $slice = array_slice($points, $i, $bucket);
+            usort($slice, fn ($a, $b) => $a[1] <=> $b[1]);
+            $pair = [$slice[0], $slice[count($slice) - 1]];
+            usort($pair, fn ($a, $b) => $a[0] <=> $b[0]);
+            $out[] = $pair[0];
+            if ($pair[1] !== $pair[0]) {
+                $out[] = $pair[1];
+            }
+        }
+        $out[] = $points[$n - 1];
+        return $out;
     }
 
     /** Dashboard-Daten einmal je Timer-Durchlauf berechnen; der WebHook liefert nur noch aus. */
@@ -602,6 +770,18 @@ class SiloMonitor extends IPSModule
     // ------------------------------------------------------------------
     // Hilfsfunktionen
     // ------------------------------------------------------------------
+
+    private function ShiftTimes(): array
+    {
+        $e = $this->ReadPropertyInteger('ShiftEarly');
+        $l = $this->ReadPropertyInteger('ShiftLate');
+        $n = $this->ReadPropertyInteger('ShiftNight');
+        return [
+            1 => ['from' => sprintf('%02d:00', $e), 'to' => sprintf('%02d:00', $l)],
+            2 => ['from' => sprintf('%02d:00', $l), 'to' => sprintf('%02d:00', $n)],
+            3 => ['from' => sprintf('%02d:00', $n), 'to' => sprintf('%02d:00', $e)],
+        ];
+    }
 
     /** Schicht und Produktionstag zu einem Zeitpunkt */
     private function ShiftInfo(int $ts): array

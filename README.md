@@ -28,7 +28,7 @@ Ohne Poppins wird Segoe UI/Roboto verwendet.
 
 | Thema | Umsetzung |
 |---|---|
-| Erfassung | Auf jede Änderung der **Tonnen-Variable** (VM_UPDATE). Fällt der Wert → Verbrauch, steigt er → Befüllung. |
+| Erfassung | Die **Tonnen-Variablen** werden im Takt gelesen (Standard 30 s). Fällt der Wert → Verbrauch, steigt er → Befüllung. |
 | Messrauschen | **Totband** (Standard 0,2 t): erst ab dieser Änderung wird gebucht, Referenz wird mitgeführt – es geht nichts verloren. |
 | Messfehler | Sprünge > **Max. Sprung** (Standard 10 t) je Messung werden nicht gebucht (z. B. Sensor fällt kurz auf 0). |
 | Schichten | Früh/Spät/Nacht frei einstellbar (Standard 6/14/22 Uhr). Produktionstag beginnt mit der Frühschicht, die Nachtschicht zählt zum Vortag. |
@@ -39,6 +39,18 @@ Ohne Poppins wird Segoe UI/Roboto verwendet.
 Netto-Änderung messbar – die Entnahme in diesem Zeitraum wird dann nicht als
 Verbrauch, sondern als geringere Befüllmenge erfasst.
 
+## Bedienung des Dashboards
+
+- **Schicht wählen:** oben auf Früh/Spät/Nacht klicken. Der grüne Punkt markiert die laufende Schicht.
+- **Tag wählen:** mit ‹ › durch die Produktionstage blättern, „Live“ springt zurück.
+- **Silo-Details:** Silo-Karte oder Tabellenzeile anklicken. Das Popup zeigt den Füllstandsverlauf
+  (24 h / 7 / 30 Tage) mit den Befüllungen, den Verbrauch je Tag und Schicht, die Liste der Befüllungen
+  und eine Prognose (Warnschwelle / leer). Schließen mit ×, Esc oder Klick daneben.
+- Nach 5 Minuten ohne Bedienung kehrt die Anzeige automatisch zur Live-Ansicht zurück.
+
+Für die Füllstandslinie im Popup muss die **Tonnen-Variable** jedes Silos archiviert werden
+(Variable auswählen → Archivierung aktivieren). Balken, Befüllungsliste und Prognose funktionieren auch ohne.
+
 ## Variablen (archivierbar)
 
 Je Silo: *Verbrauch Schicht*, *Verbrauch Tag*, *Befüllung Tag*; dazu Summen und
@@ -48,11 +60,13 @@ Für Langzeitauswertungen einfach die Archivierung der Tag-Variablen aktivieren.
 ## Funktionen
 
 ```php
-SILO_Update($id);                              // Variablen/Anzeige neu berechnen
+SILO_Update($id);                              // sofort erfassen und Anzeige neu berechnen
+SILO_Diagnose($id);                            // Prüfbericht (WebHook, Variablen, Referenzen)
 SILO_ResetReference($id);                      // aktuelle Füllstände als Referenz übernehmen
 SILO_ResetStatistics($id);                     // komplette Historie löschen
 SILO_GetDashboardData($id);                    // alle Daten als JSON
 SILO_GetConsumption($id, 4, '2026-11-20', 1);  // Silo 4, Frühschicht (0 = ganzer Tag)
 ```
 
-JSON-Endpunkt für andere Systeme (ERP/MES): `/hook/silomonitor?data=1`
+JSON-Endpunkte für andere Systeme (ERP/MES):
+`/hook/silomonitor?data=1` (heute) · `?data=1&day=2026-11-19` (Rückschau) · `?silo=4&range=7` (Silo-Details)
