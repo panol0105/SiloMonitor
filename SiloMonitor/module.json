@@ -3,10 +3,7 @@
     "name": "SiloMonitor",
     "type": 3,
     "vendor": "Produktion",
-    "aliases": [
-        "Silo Übersicht",
-        "Silo Monitor"
-    ],
+    "aliases": [],
     "parentRequirements": [],
     "childRequirements": [],
     "implemented": [],
