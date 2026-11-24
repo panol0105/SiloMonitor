@@ -35,8 +35,13 @@ class SiloMonitor extends IPSModule
 
         $this->RegisterPropertyInteger('SampleInterval', 30);
         $this->RegisterPropertyFloat('Deadband', 0.2);
-        $this->RegisterPropertyFloat('MaxJump', 10.0);
-        $this->RegisterPropertyInteger('FillMerge', 30);
+        $this->RegisterPropertyFloat('MaxJump', 10.0);          // veraltet (bis 1.3), nicht mehr genutzt
+        $this->RegisterPropertyInteger('FillMerge', 30);        // veraltet (bis 1.3), nicht mehr genutzt
+        $this->RegisterPropertyFloat('FillStart', 1.0);         // Anstieg, ab dem eine Befüllung beginnt (t)
+        $this->RegisterPropertyInteger('FillSettle', 10);       // Befüllung endet nach x min ohne weiteren Anstieg
+        $this->RegisterPropertyBoolean('FillCompensate', true); // Entnahme während der Befüllung hinzurechnen
+        $this->RegisterPropertyFloat('MaxRate', 5.0);           // plausible Änderung (t/min), darüber = Messfehler
+        $this->RegisterPropertyInteger('MedianSamples', 5);     // Glättung (Anzahl Messwerte)
         $this->RegisterPropertyInteger('HistoryDays', 35);
 
         $this->RegisterPropertyInteger('WarnLevel', 30);
@@ -241,6 +246,22 @@ class SiloMonitor extends IPSModule
             }
             $out[] = $line;
         }
+        $out[] = '';
+        $out[] = 'Letzte Befüllungen (Stand vorher → Höchststand + Entnahme während Befüllung = Menge):';
+        $names = [];
+        foreach ($silos as $silo) {
+            $names[$silo['Pos']] = $silo['Name'];
+        }
+        $last = array_slice(json_decode($this->ReadAttributeString('Events'), true) ?: [], -8);
+        if (count($last) === 0) {
+            $out[] = '  keine';
+        }
+        foreach (array_reverse($last) as $e) {
+            $out[] = sprintf('  %s %s–%s  %s: %s → %s t + %s t = %.2f t%s',
+                date('d.m.', $e['start']), date('H:i', $e['start']), date('H:i', $e['end']), $names[$e['s']] ?? ('Silo ' . $e['s']),
+                isset($e['base']) ? number_format($e['base'], 2, ',', '') : '?', isset($e['peak']) ? number_format($e['peak'], 2, ',', '') : '?',
+                isset($e['comp']) ? number_format($e['comp'], 2, ',', '') : '?', $e['t'], !empty($e['open']) ? '  (läuft)' : '');
+        }
         $text = implode("\n", $out);
         echo $text;
         return $text;
@@ -306,65 +327,192 @@ class SiloMonitor extends IPSModule
     // Erfassung
     // ------------------------------------------------------------------
 
-    private function ProcessLevel(int $pos, float $value, int $ts, array &$state, array &$stats, array &$events): bool
+    /**
+     * Verarbeitet einen Messwert eines Silos.
+     *
+     *  1. Glättung: gleitender Median über die letzten n Messwerte (filtert Ausreißer beim Einblasen).
+     *  2. Plausibilität: Änderung schneller als MaxRate t/min gilt als Messfehler (nach 30 min wird der Wert übernommen).
+     *  3. Ruhe/Entnahme: Abnahme ≥ Totband wird als Verbrauch gebucht, kleine Anstiege werden ignoriert.
+     *  4. Befüllung: Anstieg ≥ FillStart startet einen Vorgang. Währenddessen wird nichts einzeln gebucht.
+     *     Ende nach FillSettle min ohne neuen Höchststand. Menge = Höchststand − Stand vorher
+     *     + geschätzte Entnahme während der Befüllung (Verbrauchsrate der 60 min davor).
+     */
+    private function ProcessLevel(int $pos, float $raw, int $ts, array &$state, array &$stats, array &$events): bool
     {
         $k = (string) $pos;
+        $s = $state[$k] ?? [];
+        $deadband = $this->ReadPropertyFloat('Deadband');
 
-        if (!isset($state[$k]['ref'])) {
-            $state[$k] = ['ref' => $value, 'dir' => 0, 'ts' => 0];
+        // 1. Glättung
+        $buf = $s['buf'] ?? [];
+        if (isset($s['last']) && $ts - (int) $s['last'] > 300) {
+            $buf = []; // nach einer Lücke nicht mit alten Werten mitteln
+        }
+        $buf[] = $raw;
+        $buf = array_slice($buf, -max(1, $this->ReadPropertyInteger('MedianSamples')));
+        $sorted = $buf;
+        sort($sorted);
+        $v = $sorted[intdiv(count($sorted), 2)];
+        $prevV = $s['v'] ?? null;
+        $prevT = (int) ($s['last'] ?? $ts);
+        $chgT = (int) ($s['vts'] ?? $prevT);   // Zeitpunkt der letzten Wertänderung
+        $s['buf'] = $buf;
+        $s['last'] = $ts;
+
+        if (!isset($s['ref'])) {
+            $s += ['ref' => $v, 'v' => $v, 'vts' => $ts, 'low' => $ts, 'dir' => 0, 'ts' => 0, 'rate' => null, 'lb' => null, 'fill' => null];
+            $state[$k] = $s;
             return true;
         }
 
-        $delta = $value - (float) $state[$k]['ref'];
-        if (abs($delta) < $this->ReadPropertyFloat('Deadband')) {
-            return false; // Messrauschen
+        // 2. Plausibilität (Rate statt fester Sprunggrenze → nach Ausfällen geht nichts verloren)
+        $maxRate = $this->ReadPropertyFloat('MaxRate');
+        if ($maxRate > 0 && $prevV !== null) {
+            // OPC-Werte kommen evtl. nur selten → erlaubte Änderung ab der letzten Wertänderung rechnen
+            $allowed = $maxRate * max(0.5, ($ts - $chgT) / 60) + $deadband;
+            if (abs($v - $prevV) > $allowed) {
+                $s['bad'] = $s['bad'] ?? $ts;
+                if ($ts - $s['bad'] < 1800) {
+                    $this->SendDebug('Unplausibel', sprintf('Silo %d: %.2f → %.2f t ignoriert', $pos, $prevV, $v), 0);
+                    $s['buf'] = array_slice($buf, 0, -1);
+                    $state[$k] = $s;
+                    return true;
+                }
+                // Wert bleibt seit 30 min so → neue Basis (z. B. nach Kalibrierung)
+                $this->SendDebug('Neue Basis', sprintf('Silo %d: %.2f t', $pos, $v), 0);
+                $s['ref'] = $v;
+                $s['fill'] = null;
+                $s['low'] = $ts;
+            }
         }
+        unset($s['bad'], $s['cons']);
+        if ($prevV === null || abs($v - $prevV) > 0.0001) {
+            $s['vts'] = $ts;
+        }
+        $s['v'] = $v;
 
-        $maxJump = $this->ReadPropertyFloat('MaxJump');
-        if ($maxJump > 0 && abs($delta) > $maxJump) {
-            $this->SendDebug('Sprung ignoriert', sprintf('Silo %d: %.2f t -> %.2f t', $pos, $state[$k]['ref'], $value), 0);
-            $state[$k]['ref'] = $value;
+        if (empty($s['fill'])) {
+            $d = $v - (float) $s['ref'];
+            if ($d >= $this->ReadPropertyFloat('FillStart')) {
+                // 4. Befüllung beginnt – Beginn = letzter Messwert ohne Anstieg
+                $start = (int) min($ts, $s['low'] ?? $prevT);
+                $rate = (float) ($s['rate'] ?? 0);
+                if (!empty($s['lb']) && $start - (int) $s['lb'] > 900 && (float) $s['ref'] > 1.0) {
+                    // seit > 15 min keine Entnahme, obwohl Material da war → Verbrauch höchstens Totband / Zeit.
+                    // (Bei leerem Silo nicht: dort fehlte nur das Material, die Rate davor gilt weiter.)
+                    $rate = min($rate, $deadband / (($start - (int) $s['lb']) / 60));
+                }
+                $s['fill'] = ['start' => $start, 'base' => (float) $s['ref'], 'peak' => $v, 'peakTs' => $ts, 'rate' => round($rate, 4)];
+                $events[] = ['s' => $pos, 'start' => $start, 'end' => $ts, 't' => round($d, 3), 'open' => true, 'base' => round((float) $s['ref'], 2)];
+                if (count($events) > 500) {
+                    $events = array_slice($events, -500);
+                }
+                $s['dir'] = 1;
+                $s['ts'] = $ts;
+                $this->SendDebug('Befüllung Start', sprintf('Silo %d: Basis %.2f t, Rate %.3f t/min', $pos, $s['ref'], $s['fill']['rate']), 0);
+            } elseif ($d <= -$deadband) {
+                // 3. Entnahme
+                $this->Book($stats, $k, 'c', -$d, $ts);
+                if (!empty($s['lb']) && $ts - (int) $s['lb'] <= 1800 && $ts > (int) $s['lb']) {
+                    // Verbrauchsrate (t/min) als gleitender Mittelwert – Basis für die Korrektur bei Befüllungen
+                    // Menge und Zeit getrennt mitteln (Mittel von Einzelraten wäre bei Rauschen zu hoch)
+                    $dt = ($ts - (int) $s['lb']) / 60;
+                    $s['ra'] = isset($s['ra']) ? 0.9 * (float) $s['ra'] + 0.1 * -$d : -$d;
+                    $s['rd'] = isset($s['rd']) ? 0.9 * (float) $s['rd'] + 0.1 * $dt : $dt;
+                    $s['rate'] = round($s['ra'] / max(0.01, $s['rd']), 4);
+                }
+                $s['lb'] = $ts;
+                $s['ref'] = $v;
+                $s['dir'] = -1;
+                $s['ts'] = $ts;
+            }
+            if ($v < (float) $s['ref'] + $deadband) {
+                $s['low'] = $ts; // letzter Zeitpunkt ohne nennenswerten Anstieg
+            }
+            $state[$k] = $s;
             return true;
         }
 
+        // Befüllung läuft
+        $f = $s['fill'];
+        if ($v > $f['peak'] + $deadband / 2) {
+            $f['peak'] = $v;
+            $f['peakTs'] = $ts;
+        }
+        $comp = $this->ReadPropertyBoolean('FillCompensate') ? $f['rate'] * max(0, $f['peakTs'] - $f['start']) / 60 : 0.0;
+        $amount = $f['peak'] - $f['base'] + $comp;
+        $idx = $this->OpenEventIndex($events, $pos);
+        if ($idx !== null) {
+            $events[$idx]['t'] = round($amount, 3);
+            $events[$idx]['end'] = $f['peakTs'];
+        }
+        $s['dir'] = 1;
+        $s['ts'] = $ts;
+
+        $settled = $ts - $f['peakTs'] >= $this->ReadPropertyInteger('FillSettle') * 60;
+        if ($settled || $ts - $f['start'] > 6 * 3600) {
+            if ($this->ReadPropertyBoolean('FillCompensate') && $ts > $f['peakTs']) {
+                // tatsächliche Verbrauchsrate im Nachlauf messen und mit der Rate vorher mitteln
+                $post = max(0.0, ($f['peak'] - $v) / (($ts - $f['peakTs']) / 60));
+                $f['rate'] = ($f['rate'] + $post) / 2;
+                $comp = $f['rate'] * max(0, $f['peakTs'] - $f['start']) / 60;
+                $amount = $f['peak'] - $f['base'] + $comp;
+                if ($post > 0) {
+                    $s['rate'] = round(0.5 * (float) ($s['rate'] ?? $post) + 0.5 * $post, 4);
+                }
+            }
+            if ($v - $f['base'] + $comp < $this->ReadPropertyFloat('FillStart')) {
+                // Fehlalarm (z. B. Störung) – kein Befüllvorgang
+                if ($idx !== null) {
+                    array_splice($events, $idx, 1);
+                }
+                if ($f['base'] - $v >= $deadband) {
+                    $this->Book($stats, $k, 'c', $f['base'] - $v, $ts);
+                }
+                $this->SendDebug('Befüllung verworfen', sprintf('Silo %d', $pos), 0);
+            } else {
+                // Befüllung buchen (auf den Zeitpunkt des Beginns) + Entnahme währenddessen und danach
+                $this->Book($stats, $k, 'f', $amount, $f['start']);
+                $consumed = $comp + max(0, $f['peak'] - $v);
+                if ($consumed > 0.001) {
+                    $this->Book($stats, $k, 'c', $consumed, $ts);
+                }
+                if ($idx !== null) {
+                    unset($events[$idx]['open']);
+                    $events[$idx] += ['peak' => round($f['peak'], 2), 'comp' => round($comp, 2), 'after' => round($v, 2)];
+                }
+                $this->SendDebug('Befüllung Ende', sprintf('Silo %d: %.2f → %.2f t, + %.2f t Entnahme = %.2f t', $pos, $f['base'], $f['peak'], $comp, $amount), 0);
+            }
+            $s['ref'] = $v;
+            $s['fill'] = null;
+            $s['dir'] = 0;
+            $s['lb'] = $ts;
+            $s['low'] = $ts;
+        } else {
+            $s['fill'] = $f;
+        }
+        $state[$k] = $s;
+        return true;
+    }
+
+    private function OpenEventIndex(array $events, int $pos): ?int
+    {
+        for ($i = count($events) - 1; $i >= 0; $i--) {
+            if ($events[$i]['s'] === $pos) {
+                return !empty($events[$i]['open']) ? $i : null;
+            }
+        }
+        return null;
+    }
+
+    private function Book(array &$stats, string $k, string $field, float $amount, int $ts): void
+    {
         $info = $this->ShiftInfo($ts);
-        $sKey = $info['day'] . '|' . $info['shift'];
-        $field = $delta < 0 ? 'c' : 'f';
-        $amount = abs($delta);
-
-        foreach ([['S', $sKey], ['D', $info['day']]] as [$type, $key]) {
+        foreach ([['S', $info['day'] . '|' . $info['shift']], ['D', $info['day']]] as [$type, $key]) {
             if (!isset($stats[$type][$key][$k])) {
                 $stats[$type][$key][$k] = ['c' => 0.0, 'f' => 0.0];
             }
             $stats[$type][$key][$k][$field] = round($stats[$type][$key][$k][$field] + $amount, 3);
-        }
-
-        if ($delta > 0) {
-            $this->AddFillEvent($pos, $amount, $ts, $events);
-        }
-
-        $state[$k] = ['ref' => $value, 'dir' => $delta < 0 ? -1 : 1, 'ts' => $ts];
-        $this->SendDebug($delta < 0 ? 'Entnahme' : 'Befüllung', sprintf('Silo %d: %.2f t', $pos, $amount), 0);
-        return true;
-    }
-
-    private function AddFillEvent(int $pos, float $amount, int $ts, array &$events): void
-    {
-        $merge = $this->ReadPropertyInteger('FillMerge') * 60;
-
-        for ($i = count($events) - 1; $i >= 0; $i--) {
-            if ($events[$i]['s'] === $pos) {
-                if ($ts - $events[$i]['end'] <= $merge) {
-                    $events[$i]['t'] = round($events[$i]['t'] + $amount, 3);
-                    $events[$i]['end'] = $ts;
-                    return;
-                }
-                break;
-            }
-        }
-        $events[] = ['s' => $pos, 'start' => $ts, 'end' => $ts, 't' => round($amount, 3)];
-        if (count($events) > 500) {
-            $events = array_slice($events, -500);
         }
     }
 
@@ -374,7 +522,8 @@ class SiloMonitor extends IPSModule
         foreach ($this->GetSilos() as $silo) {
             $k = (string) $silo['Pos'];
             if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons']) && ($force || !isset($state[$k]['ref']))) {
-                $state[$k] = ['ref' => (float) GetValue($silo['VarTons']), 'dir' => 0, 'ts' => 0];
+                $v = (float) GetValue($silo['VarTons']);
+                $state[$k] = ['ref' => $v, 'v' => $v, 'vts' => time(), 'low' => time(), 'buf' => [$v], 'last' => time(), 'dir' => 0, 'ts' => 0, 'rate' => $state[$k]['rate'] ?? null, 'lb' => null, 'fill' => null];
             }
         }
         $this->WriteAttributeString('State', json_encode($state));
@@ -504,7 +653,7 @@ class SiloMonitor extends IPSModule
                 'shifts'    => $shifts,
                 'consShift' => $shifts[$info['shift']],
                 'consDay'   => $consDay,
-                'fillDay'   => (float) ($stats['D'][$day][$k]['f'] ?? 0),
+                'fillDay'   => (float) ($stats['D'][$day][$k]['f'] ?? 0) + $this->OpenFillAmount($silo['Pos'], $day),
                 'consPrev'  => (float) ($stats['D'][$yesterday][$k]['c'] ?? 0),
                 'avg7'      => $avg7 !== null ? round($avg7, 2) : null,
                 'reach'     => ($basis !== null && $basis > 0.05) ? round((float) $tons / $basis, 1) : null,
@@ -562,7 +711,10 @@ class SiloMonitor extends IPSModule
                 'start'   => $e['start'],
                 'end'     => $e['end'],
                 'tons'    => round((float) $e['t'], 2),
-                'running' => $isToday && ($now - $e['end']) < self::TREND_SECONDS,
+                'running' => $isToday && !empty($e['open']),
+                'base'    => $e['base'] ?? null,
+                'peak'    => $e['peak'] ?? null,
+                'comp'    => $e['comp'] ?? null,
                 'today'   => $this->ShiftInfo((int) $e['start'])['day'] === $day,
             ];
         }
@@ -645,7 +797,8 @@ class SiloMonitor extends IPSModule
         $fills = [];
         foreach (json_decode($this->ReadAttributeString('Events'), true) ?: [] as $e) {
             if ($e['s'] === $pos && $e['end'] >= $start) {
-                $fills[] = ['start' => $e['start'], 'end' => $e['end'], 'tons' => round((float) $e['t'], 2), 'running' => ($now - $e['end']) < self::TREND_SECONDS];
+                $fills[] = ['start' => $e['start'], 'end' => $e['end'], 'tons' => round((float) $e['t'], 2), 'running' => !empty($e['open']),
+                    'base' => $e['base'] ?? null, 'peak' => $e['peak'] ?? null, 'comp' => $e['comp'] ?? null];
             }
         }
 
@@ -770,6 +923,17 @@ class SiloMonitor extends IPSModule
     // ------------------------------------------------------------------
     // Hilfsfunktionen
     // ------------------------------------------------------------------
+
+    /** Menge einer noch laufenden Befüllung (für die Anzeige, gebucht wird erst am Ende) */
+    private function OpenFillAmount(int $pos, string $day): float
+    {
+        foreach (array_reverse(json_decode($this->ReadAttributeString('Events'), true) ?: []) as $e) {
+            if ($e['s'] === $pos) {
+                return (!empty($e['open']) && $this->ShiftInfo((int) $e['start'])['day'] === $day) ? (float) $e['t'] : 0.0;
+            }
+        }
+        return 0.0;
+    }
 
     private function ShiftTimes(): array
     {

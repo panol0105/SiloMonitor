@@ -28,16 +28,17 @@ Ohne Poppins wird Segoe UI/Roboto verwendet.
 
 | Thema | Umsetzung |
 |---|---|
-| Erfassung | Die **Tonnen-Variablen** werden im Takt gelesen (Standard 30 s). Fällt der Wert → Verbrauch, steigt er → Befüllung. |
-| Messrauschen | **Totband** (Standard 0,2 t): erst ab dieser Änderung wird gebucht, Referenz wird mitgeführt – es geht nichts verloren. |
-| Messfehler | Sprünge > **Max. Sprung** (Standard 10 t) je Messung werden nicht gebucht (z. B. Sensor fällt kurz auf 0). |
+| Erfassung | Die **Tonnen-Variablen** werden im Takt gelesen (Standard 30 s) und über einen **Median von 5 Werten** geglättet (Ausreißer beim Einblasen). |
+| Verbrauch | Abnahme ≥ **Totband** (0,2 t) wird als Entnahme gebucht. Kleine Anstiege durch Messrauschen werden ignoriert. |
+| Befüllung | Anstieg ≥ **1 t** startet einen Befüllvorgang, währenddessen wird nichts einzeln gebucht. Ende nach **10 min** ohne weiteren Anstieg. **Menge = Höchststand − Stand vorher + Entnahme während der Befüllung** (hochgerechnet aus der aktuellen Verbrauchsrate). |
+| Plausibilität | Änderungen schneller als **5 t/min** (ab der letzten Wertänderung gerechnet) gelten als Messfehler. Bleibt ein Wert 30 min bestehen, wird er übernommen. |
 | Schichten | Früh/Spät/Nacht frei einstellbar (Standard 6/14/22 Uhr). Produktionstag beginnt mit der Frühschicht, die Nachtschicht zählt zum Vortag. |
-| Befüllungen | Steigende Werte innerhalb von 30 min werden zu **einem Ereignis** zusammengefasst (Start–Ende, Menge). |
 | Reichweite | Bestand ÷ Ø-Tagesverbrauch der letzten 7 abgeschlossenen Produktionstage (je Silo und je Material). |
 
-**Hinweis:** Wird während einer Befüllung gleichzeitig entnommen, ist nur die
-Netto-Änderung messbar – die Entnahme in diesem Zeitraum wird dann nicht als
-Verbrauch, sondern als geringere Befüllmenge erfasst.
+**Abgleich mit dem Lieferschein:** Im Silo-Popup und unter „Diagnose“ steht zu jeder Befüllung
+Stand vorher → Höchststand und die hinzugerechnete Entnahme. Weicht die Menge dauerhaft um einen
+festen Prozentsatz vom Lieferschein ab, liegt es meist an der Umrechnung Füllstand → Tonnen in der
+Messung (Schüttdichte), nicht an der Erfassung.
 
 ## Bedienung des Dashboards
 

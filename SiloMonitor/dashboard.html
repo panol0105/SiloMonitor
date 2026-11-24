@@ -77,22 +77,34 @@
 
   /* ---------- Silos ---------- */
   #silos { display: grid; gap: var(--gap); }
-  .silo { padding: .8rem .8rem .8rem; display: flex; flex-direction: column; align-items: center; min-width: 0; min-height: 0; overflow: hidden; }
-  .tags { width: 100%; min-height: 1.45rem; display: flex; justify-content: space-between; gap: 4px; }
+  .silo { padding: .8rem .9rem .75rem; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+  .shead { display: flex; align-items: center; gap: .4rem; min-height: 1.6rem; }
+  .shead h2 { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tags { display: flex; gap: 4px; flex: none; }
   .tag { font-size: .78rem; font-weight: 500; padding: .1rem .55rem; border-radius: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tag.cons { background: var(--primary-soft); color: var(--primary); }
   .tag.fill { background: var(--good-soft); color: #2da14a; animation: pulse 1.6s infinite; }
-  .tag.warning { background: var(--warning-soft); color: var(--warning); margin-left: auto; }
-  .tag.critical { background: var(--critical-soft); color: var(--critical); margin-left: auto; }
+  .tag.warning { background: var(--warning-soft); color: var(--warning); }
+  .tag.critical { background: var(--critical-soft); color: var(--critical); }
   @keyframes pulse { 50% { opacity: .5; } }
-  .silo h2 { font-size: 1.2rem; font-weight: 500; }
+  .silo h2 { font-size: 1.2rem; font-weight: 700; }
   .chip { display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip .ct { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .chip i { width: .65rem; height: .65rem; border-radius: 2px; flex: none; }
   .silo .chip { font-size: .93rem; color: var(--text-2); }
-  .silo svg { flex: 1 1 0; width: 100%; min-height: 0; margin: .5rem 0 .4rem; }
-  .silo .pct { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+  .silo svg { flex: 1 1 0; width: 100%; min-height: 0; margin: .35rem 0 .3rem; overflow: visible; }
+  .silo .mrow { display: flex; align-items: center; justify-content: space-between; gap: .4rem; min-height: 1.45rem; }
+  .silo .mat { min-width: 0; display: flex; }
+  .sv .lvl { transition: transform 1.4s cubic-bezier(.4, 0, .2, 1), opacity .4s; }
+  .sv .stream, .sv .drip { stroke-dasharray: 3 6; animation: flow .5s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -9; } }
+  .silo.is-empty .pct { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .sv .lvl { transition: none; } .sv .stream, .sv .drip { animation: none; } }
+  .silo .vals { display: flex; align-items: flex-end; justify-content: space-between; gap: .4rem; }
+  .silo .pct { font-size: 2.2rem; font-weight: 700; line-height: 1; white-space: nowrap; }
   .silo .pct u { text-decoration: none; font-size: 1.1rem; margin-left: 2px; }
-  .silo .tons { font-size: .93rem; color: var(--muted); margin-top: .2rem; white-space: nowrap; }
+  .silo .tons { font-size: .8rem; color: var(--muted); text-align: right; white-space: nowrap; line-height: 1.25; }
+  .silo .tons b { display: block; font-size: 1rem; font-weight: 500; color: var(--text); }
   .silo .meta { width: 100%; display: flex; justify-content: space-between; gap: .3rem; margin-top: .5rem; padding-top: .45rem; border-top: 1px solid var(--line); font-size: .8rem; color: var(--muted); }
   .silo .meta b { display: block; color: var(--text); font-size: 1.05rem; font-weight: 500; white-space: nowrap; }
   .silo .meta b.g { color: var(--good); } .silo .meta b.o { color: var(--warning); } .silo .meta b.r { color: var(--critical); }
@@ -189,7 +201,10 @@
     .fills { flex: 1 1 0; }
     .fills .list { max-height: none; }
     #silos.many { height: clamp(290px, 34vh, 520px); }
-    #silos.many .silo .pct { font-size: 1.9rem; }
+    #silos.many .silo .pct { font-size: 1.75rem; }
+    #silos.many .silo { padding: .7rem .65rem; }
+    #silos.many .silo .tons { font-size: .72rem; }
+    #silos.many .silo .tons b { font-size: .9rem; }
     #silos.many .silo h2 { font-size: 1.1rem; }
     #silos.many .tag { font-size: .7rem; padding: .1rem .4rem; }
     table.dense { font-size: .93rem; }
@@ -200,7 +215,7 @@
   /* ===== Laptop / kleinere Monitore ===== */
   @media (max-width: 1499px), (max-height: 819px) {
     #silos { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; }
-    .silo svg { flex: none; height: 190px; }
+    .silo svg { flex: none; height: 220px; }
     #bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "silo silo" "mat bal"; }
   }
   @media (max-width: 1100px) {
@@ -217,7 +232,7 @@
     .spacer { display: none; }
     .status { width: 100%; justify-content: space-between; }
     #silos { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    .silo svg { height: 150px; }
+    .silo svg { height: 170px; }
     .kpi .val { font-size: 2.2rem; }
   }
   @media (max-width: 420px) {
@@ -294,29 +309,124 @@
   function reachTxt(r) { return r == null ? '–' : (r > 99 ? '> 99' : nf1.format(r)) + ' Tg'; }
   function chip(m) {
     if (!m) return '<span class="chip">–</span>';
-    return '<span class="chip"><i style="background:' + (matColor[m] || '#a7a8a9') + '"></i>' + esc(m) + '</span>';
+    return '<span class="chip" title="' + esc(m) + '"><i style="background:' + (matColor[m] || '#a7a8a9') + '"></i><span class="ct">' + esc(m) + '</span></span>';
   }
 
-  function siloSVG(pct, color) {
-    var top = 26, bottom = 232, h = bottom - top;
-    var y = bottom - h * Math.max(0, Math.min(100, pct)) / 100;
-    var shape = 'M14,26 L106,26 L106,180 L68,232 L52,232 L14,180 Z';
-    var id = 'c' + Math.random().toString(36).slice(2, 8);
-    var ticks = '';
-    [25, 50, 75].forEach(function (p) {
-      var ty = bottom - h * p / 100;
-      ticks += '<line x1="106" x2="113" y1="' + ty + '" y2="' + ty + '" stroke="#c9ccd1" stroke-width="1.5"/>';
+  // ================= Silo-Grafik =================
+  // Geometrie (viewBox 0 0 140 256): Zylinder 16..124 / 40..166, Konus bis 210, Auslauf r=9
+  var G = { R: 54, r0: 9, yTop: 40, yRing: 166, yCone: 210, cx: 70 };
+  G.Vcone = (G.yCone - G.yRing) / 3 * (G.R * G.R + G.R * G.r0 + G.r0 * G.r0);
+  G.Vbody = G.R * G.R * (G.yRing - G.yTop);
+  // Füllhöhe nach Volumen: der Konus fasst nur ~11 % – sonst wirkt ein Silo mit 20 % fast leer
+  function levelY(p) {
+    var v = Math.max(0, Math.min(1, p / 100)) * (G.Vcone + G.Vbody), H = G.yCone - G.yRing;
+    if (v >= G.Vcone) return G.yRing - (v - G.Vcone) / (G.R * G.R);
+    var lo = 0, hi = H;
+    for (var i = 0; i < 30; i++) {
+      var mid = (lo + hi) / 2, r = G.r0 + (G.R - G.r0) * mid / H;
+      if (mid / 3 * (G.r0 * G.r0 + G.r0 * r + r * r) < v) lo = mid; else hi = mid;
+    }
+    return G.yCone - lo;
+  }
+  function halfWidthAt(y) { return y <= G.yRing ? G.R : G.r0 + (G.R - G.r0) * (G.yCone - y) / (G.yCone - G.yRing); }
+
+  var FILL = {
+    good:     { dark: '#1f6fae', base: '#3a8fd0', light: '#a5cdee', top: '#cfe4f6', edge: '#2a7cbd' },
+    warning:  { dark: '#bf7a00', base: '#eda100', light: '#fbd88a', top: '#feebc0', edge: '#d68f00' },
+    critical: { dark: '#a52a2a', base: '#d84545', light: '#f2a6a6', top: '#f9d2d2', edge: '#c03737' }
+  };
+  var SHAPE = 'M16,40 H124 V166 L79,210 H61 L16,166 Z';
+
+  function siloSVG(pos) {
+    var id = 'sv' + pos, grads = '';
+    Object.keys(FILL).forEach(function (k) {
+      var c = FILL[k];
+      grads += '<linearGradient id="' + id + k + '" x1="0" x2="1"><stop offset="0" stop-color="' + c.dark + '"/><stop offset=".28" stop-color="' + c.light + '"/>' +
+        '<stop offset=".55" stop-color="' + c.base + '"/><stop offset="1" stop-color="' + c.dark + '"/></linearGradient>';
     });
-    return '<svg viewBox="0 0 120 262" preserveAspectRatio="xMidYMid meet">' +
-      '<defs><clipPath id="' + id + '"><path d="' + shape + '"/></clipPath></defs>' +
-      '<path d="M14,26 L60,7 L106,26 Z" fill="#e4e7eb" stroke="#c9ccd1" stroke-width="2" stroke-linejoin="round"/>' +
-      '<path d="' + shape + '" fill="#f0f3f7"/>' +
-      '<rect clip-path="url(#' + id + ')" x="0" y="' + y + '" width="120" height="' + (bottom - y + 2) + '" fill="' + color + '" fill-opacity=".85"/>' +
-      (pct > 0.5 ? '<line clip-path="url(#' + id + ')" x1="0" x2="120" y1="' + y + '" y2="' + y + '" stroke="' + color + '" stroke-width="3"/>' : '') +
-      '<path d="' + shape + '" fill="none" stroke="#c9ccd1" stroke-width="2.5" stroke-linejoin="round"/>' +
-      '<rect x="52" y="232" width="16" height="9" rx="2" fill="#c9ccd1"/>' +
-      '<path d="M20,180 L14,258 M100,180 L106,258" stroke="#d5d8dc" stroke-width="4" stroke-linecap="round"/>' +
+    var ticks = '';
+    [25, 50, 75, 100].forEach(function (p) {
+      var y = levelY(p);
+      ticks += '<line x1="124" x2="' + (p % 50 ? 128 : 132) + '" y1="' + y + '" y2="' + y + '" stroke="#c3c9d0" stroke-width="1.4"/>';
+    });
+    return '<svg class="sv" viewBox="0 0 140 256" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
+      '<defs>' + grads +
+        '<linearGradient id="' + id + 'sh" x1="0" x2="1"><stop offset="0" stop-color="#d9dee4"/><stop offset=".22" stop-color="#f6f7f9"/><stop offset=".6" stop-color="#e9ecf0"/><stop offset="1" stop-color="#ccd2d9"/></linearGradient>' +
+        '<linearGradient id="' + id + 'rf" x1="0" x2="1"><stop offset="0" stop-color="#cfd5dc"/><stop offset=".35" stop-color="#eef0f3"/><stop offset="1" stop-color="#c3c9d0"/></linearGradient>' +
+        '<clipPath id="' + id + 'cl"><path d="' + SHAPE + '"/></clipPath>' +
+      '</defs>' +
+      // Stützen (hinten / vorne) mit Querstrebe
+      '<g stroke="#d3d8de" stroke-width="3.5" stroke-linecap="round"><path d="M46,192 L44,250 M94,192 L96,250"/></g>' +
+      '<path d="M24,236 H116 M26,212 L44,246 M114,212 L96,246" stroke="#dde1e6" stroke-width="2" fill="none"/>' +
+      '<g stroke="#c3c9d0" stroke-width="4.5" stroke-linecap="round"><path d="M22,160 L19,250 M118,160 L121,250"/></g>' +
+      '<path d="M13,251 H27 M113,251 H127" stroke="#b3bac2" stroke-width="3" stroke-linecap="round"/>' +
+      // Behälter
+      '<path d="' + SHAPE + '" fill="url(#' + id + 'sh)"/>' +
+      // Füllung (Gruppe wird per CSS-Transform auf die Füllhöhe geschoben → weiche Animation)
+      '<g clip-path="url(#' + id + 'cl)"><g class="lvl">' +
+        '<rect class="lf" x="0" y="0" width="140" height="256"/>' +
+        '<ellipse class="ls" cx="70" cy="0" rx="54" ry="4.5"/>' +
+      '</g></g>' +
+      // Nähte, Ring, Glanz
+      '<path d="M16,72 H124 M16,104 H124 M16,136 H124" stroke="#000" stroke-opacity=".06" stroke-width="1"/>' +
+      '<rect x="14" y="163" width="112" height="5" rx="1.5" fill="#c3c9d0"/>' +
+      '<rect x="26" y="42" width="6" height="120" fill="#fff" fill-opacity=".35" clip-path="url(#' + id + 'cl)"/>' +
+      // Schwellen
+      '<line class="tw" x1="16" x2="124" stroke="#e28310" stroke-width="1.3" stroke-dasharray="4 3"/>' +
+      '<line class="tc" x1="16" x2="124" stroke="#d03b3b" stroke-width="1.3" stroke-dasharray="4 3"/>' +
+      '<path d="' + SHAPE + '" fill="none" stroke="#b9c0c8" stroke-width="1.6" stroke-linejoin="round"/>' +
+      // Auslauf
+      '<rect x="61" y="209" width="18" height="10" rx="2" fill="#b9c0c8"/>' +
+      '<line class="drip" x1="70" x2="70" y1="222" y2="248" stroke-width="3" stroke-linecap="round"/>' +
+      // Dach mit Befüllstutzen
+      '<path d="M88,28 V8 H104 V16" fill="none" stroke="#b9c0c8" stroke-width="5" stroke-linejoin="round"/>' +
+      '<path d="M11,42 L70,16 L129,42 Z" fill="url(#' + id + 'rf)" stroke="#b9c0c8" stroke-width="1.6" stroke-linejoin="round"/>' +
+      '<line class="stream" x1="92" x2="92" y1="34" stroke-width="3" stroke-linecap="round"/>' +
       ticks + '</svg>';
+  }
+
+  function siloCard(s) {
+    return '<div class="card silo" data-pos="' + s.pos + '" title="Details anzeigen">' +
+      '<div class="shead"><h2></h2><div class="tags st"></div></div><div class="mrow"><div class="mat"></div><div class="tags tr"></div></div>' + siloSVG(s.pos) +
+      '<div class="vals"><div class="pct"></div><div class="tons"></div></div><div class="meta"></div></div>';
+  }
+
+  function updateSilo(el, s, d, cur, many) {
+    var status = s.percent < d.critical ? 'critical' : (s.percent < d.warn ? 'warning' : 'good');
+    var c = FILL[status], id = 'sv' + s.pos;
+    var badge = status === 'critical' ? '<span class="tag critical">' + (many ? 'Krit.' : 'Kritisch') + '</span>'
+      : (status === 'warning' ? '<span class="tag warning">' + (many ? 'Niedr.' : 'Niedrig') + '</span>' : '');
+    var trend = s.trend > 0 ? '<span class="tag fill" title="Befüllung läuft">●' + (many ? '' : ' Befüllung') + '</span>'
+      : (s.trend < 0 ? '<span class="tag cons" title="Entnahme">↓' + (many ? '' : ' Entnahme') + '</span>' : '');
+    if (many) badge = badge.replace('>Krit.<', '>!<').replace('>Niedr.<', '>!<');
+    function set(sel, html) { var e = el.querySelector(sel); if (e.innerHTML !== html) e.innerHTML = html; }
+    set('.tags.st', badge);
+    set('.tags.tr', trend);
+    set('h2', esc(s.name));
+    set('.mat', chip(s.material));
+    set('.pct', nf1.format(s.percent) + '<u>%</u>');
+    set('.tons', '<b>' + t(s.tons) + ' t</b>' + (s.capacity ? 'von ' + nf0.format(s.capacity) + ' t' : ''));
+    set('.meta', '<span>' + d.shiftNames[cur] + '<b>' + t(s.shifts[cur]) + ' t</b></span><span style="text-align:right">Reichweite' +
+      '<b class="' + reachCls(s.reach) + '">' + reachTxt(s.reach) + '</b></span>');
+
+    var y = levelY(s.percent), empty = s.percent < 0.3;
+    var lvl = el.querySelector('.lvl'), lf = el.querySelector('.lf'), ls = el.querySelector('.ls');
+    lvl.style.transform = 'translateY(' + y.toFixed(2) + 'px)';
+    lvl.style.opacity = empty ? 0 : 1;
+    lf.setAttribute('fill', 'url(#' + id + status + ')');
+    ls.setAttribute('fill', c.top); ls.setAttribute('stroke', c.edge); ls.setAttribute('stroke-width', '1');
+    ls.setAttribute('rx', halfWidthAt(y).toFixed(1));
+    [['.tw', d.warn], ['.tc', d.critical]].forEach(function (th) {
+      var ln = el.querySelector(th[0]), ty = levelY(th[1]), hw = halfWidthAt(ty);
+      ln.setAttribute('y1', ty); ln.setAttribute('y2', ty); ln.setAttribute('x1', G.cx - hw); ln.setAttribute('x2', G.cx + hw);
+      ln.style.display = th[1] > 0 ? '' : 'none';
+    });
+    var st = el.querySelector('.stream'), dr = el.querySelector('.drip');
+    st.setAttribute('y2', Math.max(38, y - 4)); st.setAttribute('stroke', c.base);
+    st.style.display = s.trend > 0 ? '' : 'none';
+    dr.setAttribute('stroke', c.base);
+    dr.style.display = s.trend < 0 && !empty ? '' : 'none';
+    el.classList.toggle('is-empty', empty);
   }
 
   function render() {
@@ -390,21 +500,9 @@
     var n = Math.max(d.silos.length, 1), many = n > 9;
     box.style.gridTemplateColumns = 'repeat(' + n + ', minmax(0, 1fr))';
     box.className = many ? 'many' : '';
-    box.innerHTML = d.silos.map(function (s) {
-      var status = s.percent < d.critical ? 'critical' : (s.percent < d.warn ? 'warning' : 'good');
-      var color = status === 'critical' ? '#d03b3b' : (status === 'warning' ? '#eda100' : '#27a550');
-      var badge = status === 'critical' ? '<span class="tag critical">' + (many ? 'Krit.' : 'Kritisch') + '</span>'
-        : (status === 'warning' ? '<span class="tag warning">' + (many ? 'Niedr.' : 'Niedrig') + '</span>' : '');
-      var trend = s.trend > 0 ? '<span class="tag fill">● ' + (many ? 'Füllt' : 'Befüllung') + '</span>'
-        : (s.trend < 0 ? '<span class="tag cons">↓ ' + (many ? 'Entn.' : 'Entnahme') + '</span>' : '');
-      return '<div class="card silo" data-pos="' + s.pos + '" title="Details anzeigen"><div class="tags">' + trend + badge + '</div>' +
-        '<h2>' + esc(s.name) + '</h2>' + chip(s.material) +
-        siloSVG(s.percent, color) +
-        '<div class="pct">' + nf1.format(s.percent) + '<u>%</u></div>' +
-        '<div class="tons">' + t(s.tons) + (s.capacity ? ' / ' + nf0.format(s.capacity) : '') + ' t</div>' +
-        '<div class="meta"><span>' + d.shiftNames[cur] + '<b>' + t(s.shifts[cur]) + ' t</b></span><span style="text-align:right">Reichweite' +
-        '<b class="' + reachCls(s.reach) + '">' + reachTxt(s.reach) + '</b></span></div></div>';
-    }).join('');
+    var key = d.silos.map(function (s) { return s.pos; }).join(',');
+    if (box.dataset.key !== key) { box.innerHTML = d.silos.map(siloCard).join(''); box.dataset.key = key; }
+    d.silos.forEach(function (s) { updateSilo(box.querySelector('.silo[data-pos="' + s.pos + '"]'), s, d, cur, many); });
 
     // ---- Tabelle Silos ----
     // Priorität: p1 immer · p2 ab mittlerer Breite · p3 nur bei breitem Panel. Aktuelle Schicht ist immer sichtbar.
@@ -601,20 +699,23 @@
       '<div class="mgrid">' +
         '<div class="mpanel wide"><h4>Füllstandsverlauf<span class="legend"><span><i style="background:var(--primary)"></i>Füllstand</span><span><i style="background:var(--fill);height:10px;opacity:.35"></i>Befüllung</span><span><i style="background:var(--warning)"></i>Warnschwelle</span></span></h4><div class="mchart" id="mLine"></div></div>' +
         '<div class="mpanel"><h4>Verbrauch je Tag &amp; Schicht<span class="legend">' + [1, 2, 3].map(function (i) { return '<span><i style="background:' + SHIFT_COL[i] + ';height:10px"></i>' + m.shiftNames[i] + '</span>'; }).join('') + '<span><i style="background:var(--fill);height:10px"></i>Befüllung</span></span></h4><div class="mchart" id="mBars"></div></div>' +
-        '<div class="mpanel"><h4>Befüllungen<small style="font-weight:400;color:var(--text-2);font-size:.85rem">' + rangeTxt[m.range] + '</small></h4><div class="scroll" style="max-height:260px"><table id="mFills"></table></div></div>' +
+        '<div class="mpanel"><h4 title="Menge = Höchststand − Stand vorher + Entnahme während der Befüllung">Befüllungen<small style="font-weight:400;color:var(--text-2);font-size:.85rem">' + rangeTxt[m.range] + '</small></h4><div class="scroll" style="max-height:260px"><table id="mFills"></table></div></div>' +
       '</div>';
 
     drawLine(document.getElementById('mLine'), m);
     drawBars(document.getElementById('mBars'), m);
 
     document.getElementById('mFills').innerHTML = m.fills.length ?
-      '<thead><tr><th>Datum</th><th>Zeit</th><th class="p2">Dauer</th><th>Menge</th></tr></thead><tbody>' +
+      '<thead><tr><th>Datum</th><th>Zeit</th><th class="p3">Dauer</th><th class="p2" title="Stand vorher → Höchststand">Füllstand</th><th class="p2" title="Entnahme während der Befüllung (hochgerechnet)">+ Entnahme</th><th>Menge</th></tr></thead><tbody>' +
       m.fills.map(function (f) {
         var d0 = new Date(f.start * 1000);
         return '<tr><td>' + wd(d0.getFullYear() + '-' + pad(d0.getMonth() + 1) + '-' + pad(d0.getDate())) + ' ' + pad(d0.getDate()) + '.' + pad(d0.getMonth() + 1) + '.</td>' +
           '<td>' + hm(f.start) + (f.end - f.start > 60 ? '–' + hm(f.end) : '') + (f.running ? ' <span class="live-dot">● läuft</span>' : '') + '</td>' +
-          '<td class="p2">' + (f.end - f.start > 60 ? dur(f.end - f.start) : '–') + '</td><td class="strong">+' + t(f.tons) + '</td></tr>';
-      }).join('') + '</tbody><tfoot><tr><td>Summe</td><td></td><td class="p2"></td><td>+' + t(fillSum) + '</td></tr></tfoot>'
+          '<td class="p3">' + (f.end - f.start > 60 ? dur(f.end - f.start) : '–') + '</td>' +
+          '<td class="p2 muted">' + (f.base != null && f.peak != null ? t(f.base) + ' → ' + t(f.peak) : (f.base != null ? t(f.base) + ' → …' : '–')) + '</td>' +
+          '<td class="p2 muted">' + (f.comp != null ? '+' + t(f.comp) : '–') + '</td>' +
+          '<td class="strong">+' + t(f.tons) + '</td></tr>';
+      }).join('') + '</tbody><tfoot><tr><td>Summe</td><td></td><td class="p3"></td><td class="p2"></td><td class="p2"></td><td>+' + t(fillSum) + '</td></tr></tfoot>'
       : '<tbody><tr><td class="empty">Keine Befüllungen im Zeitraum</td></tr></tbody>';
   }
 

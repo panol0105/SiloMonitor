@@ -17,26 +17,107 @@
                 "direction": "ascending"
             },
             "columns": [
-                { "caption": "Pos", "name": "Pos", "width": "60px", "add": 1, "edit": { "type": "NumberSpinner", "minimum": 1, "maximum": 12 } },
-                { "caption": "Aktiv", "name": "Active", "width": "70px", "add": true, "edit": { "type": "CheckBox" } },
-                { "caption": "Name", "name": "Name", "width": "140px", "add": "Silo", "edit": { "type": "ValidationTextBox" } },
-                { "caption": "Füllstand %", "name": "VarPercent", "width": "220px", "add": 0, "edit": { "type": "SelectVariable" } },
-                { "caption": "Füllstand t", "name": "VarTons", "width": "220px", "add": 0, "edit": { "type": "SelectVariable" } },
-                { "caption": "Material", "name": "VarMaterial", "width": "220px", "add": 0, "edit": { "type": "SelectVariable" } },
-                { "caption": "Kapazität t (0 = auto)", "name": "Capacity", "width": "auto", "add": 0, "edit": { "type": "NumberSpinner", "digits": 1, "suffix": " t" } }
+                {
+                    "caption": "Pos",
+                    "name": "Pos",
+                    "width": "60px",
+                    "add": 1,
+                    "edit": {
+                        "type": "NumberSpinner",
+                        "minimum": 1,
+                        "maximum": 12
+                    }
+                },
+                {
+                    "caption": "Aktiv",
+                    "name": "Active",
+                    "width": "70px",
+                    "add": true,
+                    "edit": {
+                        "type": "CheckBox"
+                    }
+                },
+                {
+                    "caption": "Name",
+                    "name": "Name",
+                    "width": "140px",
+                    "add": "Silo",
+                    "edit": {
+                        "type": "ValidationTextBox"
+                    }
+                },
+                {
+                    "caption": "Füllstand %",
+                    "name": "VarPercent",
+                    "width": "220px",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Füllstand t",
+                    "name": "VarTons",
+                    "width": "220px",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Material",
+                    "name": "VarMaterial",
+                    "width": "220px",
+                    "add": 0,
+                    "edit": {
+                        "type": "SelectVariable"
+                    }
+                },
+                {
+                    "caption": "Kapazität t (0 = auto)",
+                    "name": "Capacity",
+                    "width": "auto",
+                    "add": 0,
+                    "edit": {
+                        "type": "NumberSpinner",
+                        "digits": 1,
+                        "suffix": " t"
+                    }
+                }
             ]
         },
         {
             "type": "ExpansionPanel",
             "caption": "Schichtmodell",
             "items": [
-                { "type": "Label", "caption": "Der Produktionstag beginnt mit der Frühschicht. Die Nachtschicht zählt zum Tag, an dem sie beginnt." },
+                {
+                    "type": "Label",
+                    "caption": "Der Produktionstag beginnt mit der Frühschicht. Die Nachtschicht zählt zum Tag, an dem sie beginnt."
+                },
                 {
                     "type": "RowLayout",
                     "items": [
-                        { "type": "NumberSpinner", "name": "ShiftEarly", "caption": "Frühschicht ab (Uhr)", "minimum": 0, "maximum": 23 },
-                        { "type": "NumberSpinner", "name": "ShiftLate", "caption": "Spätschicht ab (Uhr)", "minimum": 0, "maximum": 23 },
-                        { "type": "NumberSpinner", "name": "ShiftNight", "caption": "Nachtschicht ab (Uhr)", "minimum": 0, "maximum": 23 }
+                        {
+                            "type": "NumberSpinner",
+                            "name": "ShiftEarly",
+                            "caption": "Frühschicht ab (Uhr)",
+                            "minimum": 0,
+                            "maximum": 23
+                        },
+                        {
+                            "type": "NumberSpinner",
+                            "name": "ShiftLate",
+                            "caption": "Spätschicht ab (Uhr)",
+                            "minimum": 0,
+                            "maximum": 23
+                        },
+                        {
+                            "type": "NumberSpinner",
+                            "name": "ShiftNight",
+                            "caption": "Nachtschicht ab (Uhr)",
+                            "minimum": 0,
+                            "maximum": 23
+                        }
                     ]
                 }
             ]
@@ -45,36 +126,136 @@
             "type": "ExpansionPanel",
             "caption": "Erfassung & Filter",
             "items": [
-                { "type": "NumberSpinner", "name": "SampleInterval", "caption": "Erfassungstakt (s) – Füllstände werden in diesem Abstand gelesen", "minimum": 5, "maximum": 300, "suffix": " s" },
-                { "type": "NumberSpinner", "name": "Deadband", "caption": "Totband (t) – kleinere Schwankungen werden ignoriert", "digits": 2, "minimum": 0, "suffix": " t" },
-                { "type": "NumberSpinner", "name": "MaxJump", "caption": "Max. Sprung je Messung (t, 0 = aus) – größere Sprünge gelten als Messfehler", "digits": 1, "minimum": 0, "suffix": " t" },
-                { "type": "NumberSpinner", "name": "FillMerge", "caption": "Befüllungen zusammenfassen innerhalb von (min)", "minimum": 1, "suffix": " min" },
-                { "type": "NumberSpinner", "name": "HistoryDays", "caption": "Historie aufbewahren (Tage)", "minimum": 8, "maximum": 400 }
+                {
+                    "type": "NumberSpinner",
+                    "name": "SampleInterval",
+                    "caption": "Erfassungstakt (s)",
+                    "minimum": 5,
+                    "maximum": 300,
+                    "suffix": " s"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "MedianSamples",
+                    "caption": "Glättung: Median über n Messwerte (1 = aus)",
+                    "minimum": 1,
+                    "maximum": 15
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "Deadband",
+                    "caption": "Entnahme buchen ab (t)",
+                    "digits": 2,
+                    "minimum": 0,
+                    "suffix": " t"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "FillStart",
+                    "caption": "Befüllung erkennen ab Anstieg von (t)",
+                    "digits": 1,
+                    "minimum": 0.2,
+                    "suffix": " t"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "FillSettle",
+                    "caption": "Befüllung beendet nach (min ohne weiteren Anstieg)",
+                    "minimum": 2,
+                    "maximum": 120,
+                    "suffix": " min"
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "FillCompensate",
+                    "caption": "Entnahme während der Befüllung zur Befüllmenge hinzurechnen (empfohlen)"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "MaxRate",
+                    "caption": "Plausibel bis (t/min, 0 = aus) – schnellere Änderungen gelten als Messfehler",
+                    "digits": 1,
+                    "minimum": 0,
+                    "suffix": " t/min"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "HistoryDays",
+                    "caption": "Historie aufbewahren (Tage)",
+                    "minimum": 8,
+                    "maximum": 400
+                }
             ]
         },
         {
             "type": "ExpansionPanel",
             "caption": "Anzeige",
             "items": [
-                { "type": "ValidationTextBox", "name": "DashboardURL", "caption": "Dashboard-Adresse für die HTMLBox (leer = /hook/silomonitor), z. B. http://192.168.1.10:3777/hook/silomonitor", "width": "700px" },
-                { "type": "NumberSpinner", "name": "WarnLevel", "caption": "Warnung unter (%)", "minimum": 0, "maximum": 100, "suffix": " %" },
-                { "type": "NumberSpinner", "name": "CriticalLevel", "caption": "Kritisch unter (%)", "minimum": 0, "maximum": 100, "suffix": " %" },
-                { "type": "NumberSpinner", "name": "RefreshSeconds", "caption": "Aktualisierung Dashboard (s)", "minimum": 2, "maximum": 300, "suffix": " s" }
+                {
+                    "type": "ValidationTextBox",
+                    "name": "DashboardURL",
+                    "caption": "Dashboard-Adresse für die HTMLBox (leer = /hook/silomonitor), z. B. http://192.168.1.10:3777/hook/silomonitor",
+                    "width": "700px"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "WarnLevel",
+                    "caption": "Warnung unter (%)",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "suffix": " %"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "CriticalLevel",
+                    "caption": "Kritisch unter (%)",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "suffix": " %"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "RefreshSeconds",
+                    "caption": "Aktualisierung Dashboard (s)",
+                    "minimum": 2,
+                    "maximum": 300,
+                    "suffix": " s"
+                }
             ]
         }
     ],
     "actions": [
-        { "type": "Label", "name": "HookInfo", "caption": "Dashboard-URL: http://<IP-Symcon-Server>:3777/hook/silomonitor" },
-        { "type": "Button", "caption": "Diagnose", "onClick": "SILO_Diagnose($id);" },
-        { "type": "Button", "caption": "Dashboard aktualisieren", "onClick": "SILO_Update($id);" },
-        { "type": "Button", "caption": "Referenzwerte neu einlesen", "onClick": "SILO_ResetReference($id);" },
+        {
+            "type": "Label",
+            "name": "HookInfo",
+            "caption": "Dashboard-URL: http://<IP-Symcon-Server>:3777/hook/silomonitor"
+        },
+        {
+            "type": "Button",
+            "caption": "Diagnose",
+            "onClick": "SILO_Diagnose($id);"
+        },
+        {
+            "type": "Button",
+            "caption": "Dashboard aktualisieren",
+            "onClick": "SILO_Update($id);"
+        },
+        {
+            "type": "Button",
+            "caption": "Referenzwerte neu einlesen",
+            "onClick": "SILO_ResetReference($id);"
+        },
         {
             "type": "PopupButton",
             "caption": "Statistik löschen …",
             "popup": {
                 "caption": "Gesamte Verbrauchs- und Befüllungshistorie löschen?",
                 "items": [
-                    { "type": "Button", "caption": "Ja, alles löschen", "onClick": "SILO_ResetStatistics($id);" }
+                    {
+                        "type": "Button",
+                        "caption": "Ja, alles löschen",
+                        "onClick": "SILO_ResetStatistics($id);"
+                    }
                 ]
             }
         }
