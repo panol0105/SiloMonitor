@@ -192,6 +192,25 @@
             "caption": "Anzeige",
             "items": [
                 {
+                    "type": "Select",
+                    "name": "SiloStyle",
+                    "caption": "Darstellung der Silos",
+                    "options": [
+                        {
+                            "caption": "Schüttgut (Materialfarbe, Schüttkegel)",
+                            "value": "bulk"
+                        },
+                        {
+                            "caption": "Technisch / Leitstand (grau, Farbe nur bei Warnung)",
+                            "value": "hmi"
+                        },
+                        {
+                            "caption": "Klassisch (Statusfarbe, glänzend)",
+                            "value": "classic"
+                        }
+                    ]
+                },
+                {
                     "type": "ValidationTextBox",
                     "name": "DashboardURL",
                     "caption": "Dashboard-Adresse für die HTMLBox (leer = /hook/silomonitor), z. B. http://192.168.1.10:3777/hook/silomonitor",

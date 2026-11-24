@@ -47,6 +47,7 @@ class SiloMonitor extends IPSModule
         $this->RegisterPropertyInteger('WarnLevel', 30);
         $this->RegisterPropertyInteger('CriticalLevel', 15);
         $this->RegisterPropertyInteger('RefreshSeconds', 10);
+        $this->RegisterPropertyString('SiloStyle', 'bulk');
 
         // Laufzeitdaten
         $this->RegisterAttributeString('State', '{}');                    // Referenzwert/Trend je Silo
@@ -903,6 +904,7 @@ class SiloMonitor extends IPSModule
             'warn'       => $this->ReadPropertyInteger('WarnLevel'),
             'critical'   => $this->ReadPropertyInteger('CriticalLevel'),
             'refresh'    => $this->ReadPropertyInteger('RefreshSeconds'),
+            'siloStyle'  => $this->ReadPropertyString('SiloStyle'),
             'silos'      => $silos,
             'materials'  => array_values($materials),
             'history'    => $history,
