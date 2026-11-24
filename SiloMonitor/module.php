@@ -43,11 +43,12 @@ class SiloMonitor extends IPSModule
         $this->RegisterPropertyFloat('MaxRate', 5.0);           // plausible Änderung (t/min), darüber = Messfehler
         $this->RegisterPropertyInteger('MedianSamples', 5);     // Glättung (Anzahl Messwerte)
         $this->RegisterPropertyInteger('HistoryDays', 35);
+        $this->RegisterPropertyInteger('HistoryDaysLong', 400);   // Tageswerte (für Monat/Jahr)
 
         $this->RegisterPropertyInteger('WarnLevel', 30);
         $this->RegisterPropertyInteger('CriticalLevel', 15);
         $this->RegisterPropertyInteger('RefreshSeconds', 10);
-        $this->RegisterPropertyString('SiloStyle', 'bulk');
+        $this->RegisterPropertyString('SiloStyle', 'drum');
 
         // Laufzeitdaten
         $this->RegisterAttributeString('State', '{}');                    // Referenzwert/Trend je Silo
@@ -196,7 +197,7 @@ class SiloMonitor extends IPSModule
 
     public function ResetStatistics()
     {
-        $this->WriteAttributeString('Stats', '{"S":{},"D":{}}');
+        $this->WriteAttributeString('Stats', '{"S":{},"D":{},"H":{}}');
         $this->WriteAttributeString('Events', '[]');
         $this->InitReferences(true);
         $this->Tick();
@@ -302,7 +303,7 @@ class SiloMonitor extends IPSModule
         $stats = $this->GetStats();
         $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
         $state = $this->GetState();
-        $tmpStats = ['S' => [], 'D' => []];
+        $tmpStats = ['S' => [], 'D' => [], 'H' => []];
         $tmpEvents = [];
         $report = [];
         $done = [];
@@ -341,7 +342,7 @@ class SiloMonitor extends IPSModule
 
         if (count($done) > 0) {
             // alte Werte der neu berechneten Silos ab Starttag ersetzen
-            foreach (['S', 'D'] as $type) {
+            foreach (['S', 'D', 'H'] as $type) {
                 foreach ($stats[$type] as $key => $rows) {
                     if (substr((string) $key, 0, 10) >= $startDay) {
                         foreach (array_keys($done) as $k) {
@@ -457,6 +458,14 @@ class SiloMonitor extends IPSModule
             header('Content-Type: font/ttf');
             header('Cache-Control: public, max-age=604800');
             readfile($file);
+            return;
+        }
+        if (isset($_GET['bal'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            $period = in_array($_GET['period'] ?? '', ['day', 'week', 'month', 'year'], true) ? $_GET['period'] : 'week';
+            $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($_GET['date'] ?? '')) ? $_GET['date'] : $this->ShiftInfo(time())['day'];
+            echo json_encode($this->BalanceData($period, $date, (string) ($_GET['filter'] ?? 'all')), JSON_HEX_TAG | JSON_HEX_AMP);
             return;
         }
         if (isset($_GET['silo'])) {
@@ -680,7 +689,8 @@ class SiloMonitor extends IPSModule
     private function Book(array &$stats, string $k, string $field, float $amount, int $ts): void
     {
         $info = $this->ShiftInfo($ts);
-        foreach ([['S', $info['day'] . '|' . $info['shift']], ['D', $info['day']]] as [$type, $key]) {
+        $keys = [['S', $info['day'] . '|' . $info['shift']], ['D', $info['day']], ['H', $info['day'] . '|' . date('H', $ts)]];
+        foreach ($keys as [$type, $key]) {
             if (!isset($stats[$type][$key][$k])) {
                 $stats[$type][$key][$k] = ['c' => 0.0, 'f' => 0.0];
             }
@@ -704,10 +714,11 @@ class SiloMonitor extends IPSModule
     private function Prune(): void
     {
         $limit = date('Y-m-d', strtotime('-' . $this->ReadPropertyInteger('HistoryDays') . ' days'));
+        $limitLong = date('Y-m-d', strtotime('-' . max(35, $this->ReadPropertyInteger('HistoryDaysLong')) . ' days'));
         $stats = $this->GetStats();
-        foreach (['S', 'D'] as $type) {
+        foreach (['S' => $limit, 'H' => $limit, 'D' => $limitLong] as $type => $lim) {
             foreach (array_keys($stats[$type]) as $key) {
-                if (substr((string) $key, 0, 10) < $limit) {
+                if (substr((string) $key, 0, 10) < $lim) {
                     unset($stats[$type][$key]);
                 }
             }
@@ -1035,6 +1046,133 @@ class SiloMonitor extends IPSModule
         ];
     }
 
+    /**
+     * Bilanz für das große Diagramm.
+     *  day   = 24 Stundenwerte eines Produktionstages
+     *  week  = 7 Tage (Mo–So), Verbrauch je Schicht
+     *  month = alle Tage eines Monats
+     *  year  = 12 Monate
+     * $filter: all | s:<Pos> | m:<Material>
+     */
+    private function BalanceData(string $period, string $date, string $filter): array
+    {
+        $stats = $this->GetStats();
+        $today = $this->ShiftInfo(time())['day'];
+        $silos = [];
+        $options = [['value' => 'all', 'label' => 'Alle Silos']];
+        $mats = [];
+        foreach ($this->GetSilos() as $silo) {
+            $mat = trim((string) $this->ReadVar($silo['VarMaterial'], ''));
+            $options[] = ['value' => 's:' . $silo['Pos'], 'label' => $silo['Name'] . ($mat !== '' ? ' · ' . $mat : '')];
+            if ($mat !== '') {
+                $mats[$mat] = true;
+            }
+            if ($filter === 'all' || $filter === 's:' . $silo['Pos'] || ($mat !== '' && $filter === 'm:' . $mat)) {
+                $silos[] = (string) $silo['Pos'];
+            }
+        }
+        ksort($mats);
+        foreach (array_keys($mats) as $m) {
+            $options[] = ['value' => 'm:' . $m, 'label' => 'Material ' . $m];
+        }
+
+        $sum = function (array $rows) use ($silos): array {
+            $c = 0.0;
+            $f = 0.0;
+            foreach ($silos as $k) {
+                $c += (float) ($rows[$k]['c'] ?? 0);
+                $f += (float) ($rows[$k]['f'] ?? 0);
+            }
+            return [$c, $f];
+        };
+        $dayRow = function (string $d) use ($stats, $sum, $today): array {
+            [$c, $f] = $sum($stats['D'][$d] ?? []);
+            $row = ['key' => $d, 'c' => round($c, 2), 'f' => round($f, 2), 'has' => isset($stats['D'][$d]), 'cur' => $d === $today, 'future' => $d > $today];
+            for ($sh = 1; $sh <= 3; $sh++) {
+                [$sc] = $sum($stats['S'][$d . '|' . $sh] ?? []);
+                $row['s' . $sh] = round($sc, 2);
+            }
+            return $row;
+        };
+
+        $ts = strtotime($date . ' 12:00');
+        $buckets = [];
+        if ($period === 'day') {
+            $e = $this->ReadPropertyInteger('ShiftEarly');
+            $l = $this->ReadPropertyInteger('ShiftLate');
+            $n = $this->ReadPropertyInteger('ShiftNight');
+            $nowH = time();
+            for ($i = 0; $i < 24; $i++) {
+                $h = ($e + $i) % 24;
+                $off = ($h - $e + 24) % 24;
+                $shift = $off < (($l - $e + 24) % 24) ? 1 : ($off < (($n - $e + 24) % 24) ? 2 : 3);
+                [$c, $f] = $sum($stats['H'][$date . '|' . sprintf('%02d', $h)] ?? []);
+                $start = strtotime($date . ' ' . sprintf('%02d:00', $h)) + ($h < $e ? 86400 : 0);
+                $buckets[] = ['key' => sprintf('%02d', $h), 'c' => round($c, 2), 'f' => round($f, 2), 'shift' => $shift,
+                    'cur' => $nowH >= $start && $nowH < $start + 3600, 'future' => $start > $nowH];
+            }
+            $from = $to = $date;
+            $title = date('d.m.Y', $ts);
+        } elseif ($period === 'week') {
+            $monday = strtotime(date('Y-m-d', $ts) . ' 12:00 -' . ((int) date('N', $ts) - 1) . ' days');
+            for ($i = 0; $i < 7; $i++) {
+                $buckets[] = $dayRow(date('Y-m-d', strtotime(date('Y-m-d', $monday) . ' 12:00 +' . $i . ' days')));
+            }
+            $from = $buckets[0]['key'];
+            $to = $buckets[6]['key'];
+            $title = 'KW ' . (int) date('W', $monday) . ' · ' . date('d.m.', $monday) . '–' . date('d.m.Y', strtotime('+6 days', $monday));
+        } elseif ($period === 'month') {
+            $first = date('Y-m-01', $ts);
+            $days = (int) date('t', $ts);
+            for ($i = 0; $i < $days; $i++) {
+                $buckets[] = $dayRow(date('Y-m-d', strtotime($first . ' 12:00 +' . $i . ' days')));
+            }
+            $from = $first;
+            $to = date('Y-m-t', $ts);
+            $title = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][(int) date('n', $ts) - 1] . ' ' . date('Y', $ts);
+        } else {
+            $year = (int) date('Y', $ts);
+            for ($m = 1; $m <= 12; $m++) {
+                $row = ['key' => sprintf('%04d-%02d', $year, $m), 'c' => 0.0, 'f' => 0.0, 's1' => 0.0, 's2' => 0.0, 's3' => 0.0, 'has' => false,
+                    'cur' => sprintf('%04d-%02d', $year, $m) === substr($today, 0, 7), 'future' => sprintf('%04d-%02d', $year, $m) > substr($today, 0, 7)];
+                $dim = (int) date('t', mktime(12, 0, 0, $m, 1, $year));
+                for ($d = 1; $d <= $dim; $d++) {
+                    $dr = $dayRow(sprintf('%04d-%02d-%02d', $year, $m, $d));
+                    foreach (['c', 'f', 's1', 's2', 's3'] as $fld) {
+                        $row[$fld] += $dr[$fld];
+                    }
+                    $row['has'] = $row['has'] || $dr['has'];
+                }
+                foreach (['c', 'f', 's1', 's2', 's3'] as $fld) {
+                    $row[$fld] = round($row[$fld], 2);
+                }
+                $buckets[] = $row;
+            }
+            $from = $year . '-01-01';
+            $to = $year . '-12-31';
+            $title = (string) $year;
+        }
+
+        // Ältester vorhandener Tag (für die Navigation)
+        $allDays = array_keys($stats['D']);
+        sort($allDays);
+
+        return [
+            'period'     => $period,
+            'date'       => $date,
+            'today'      => $today,
+            'from'       => $from,
+            'to'         => $to,
+            'title'      => $title,
+            'filter'     => $filter,
+            'options'    => $options,
+            'buckets'    => $buckets,
+            'firstDay'   => $allDays[0] ?? $today,
+            'shiftNames' => [1 => 'Früh', 2 => 'Spät', 3 => 'Nacht'],
+            'shiftTimes' => $this->ShiftTimes(),
+        ];
+    }
+
     /** Reduziert eine Zeitreihe auf max. $max Punkte (Min/Max je Eimer bleiben erhalten) */
     private function Downsample(array $points, int $max): array
     {
@@ -1193,6 +1331,7 @@ class SiloMonitor extends IPSModule
         }
         $s['S'] = $s['S'] ?? [];
         $s['D'] = $s['D'] ?? [];
+        $s['H'] = $s['H'] ?? [];
         return $s;
     }
 

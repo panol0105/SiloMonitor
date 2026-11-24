@@ -47,6 +47,10 @@ Messung (Schüttdichte), nicht an der Erfassung.
 - **Silo-Details:** Silo-Karte oder Tabellenzeile anklicken. Das Popup zeigt den Füllstandsverlauf
   (24 h / 7 / 30 Tage) mit den Befüllungen, den Verbrauch je Tag und Schicht, die Liste der Befüllungen
   und eine Prognose (Warnschwelle / leer). Schließen mit ×, Esc oder Klick daneben.
+- **Bilanz groß:** Tagesbilanz anklicken (oder ⤢). Umschaltbar **Tag** (Stundenwerte nach Schicht),
+  **Woche**, **Monat** (Tageswerte, Verbrauch gestapelt nach Früh/Spät/Nacht) und **Jahr** (Monatswerte),
+  blättern mit ‹ ›, Filter auf ein Silo oder ein Material, Summen, Durchschnitt, Spitze und Wertetabelle.
+  Befüllungen werden der Stunde bzw. dem Tag ihres Beginns zugerechnet.
 - Nach 5 Minuten ohne Bedienung kehrt die Anzeige automatisch zur Live-Ansicht zurück.
 
 Für die Füllstandslinie im Popup muss die **Tonnen-Variable** jedes Silos archiviert werden
@@ -78,4 +82,4 @@ SILO_GetConsumption($id, 4, '2026-11-20', 1);  // Silo 4, Frühschicht (0 = ganz
 ```
 
 JSON-Endpunkte für andere Systeme (ERP/MES):
-`/hook/silomonitor?data=1` (heute) · `?data=1&day=2026-11-19` (Rückschau) · `?silo=4&range=7` (Silo-Details)
+`/hook/silomonitor?data=1` (heute) · `?bal=1&period=week&date=2026-11-24&filter=all` (Bilanz) · `?data=1&day=2026-11-19` (Rückschau) · `?silo=4&range=7` (Silo-Details)

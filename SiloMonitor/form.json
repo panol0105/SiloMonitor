@@ -181,9 +181,16 @@
                 {
                     "type": "NumberSpinner",
                     "name": "HistoryDays",
-                    "caption": "Historie aufbewahren (Tage)",
+                    "caption": "Schicht- und Stundenwerte aufbewahren (Tage)",
                     "minimum": 8,
                     "maximum": 400
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "HistoryDaysLong",
+                    "caption": "Tageswerte aufbewahren (Tage, für Monat/Jahr)",
+                    "minimum": 35,
+                    "maximum": 1500
                 }
             ]
         },
@@ -196,6 +203,10 @@
                     "name": "SiloStyle",
                     "caption": "Darstellung der Silos",
                     "options": [
+                        {
+                            "caption": "Rundsilo (Zylinder mit Trichter, Materialfarbe)",
+                            "value": "drum"
+                        },
                         {
                             "caption": "Schüttgut (Materialfarbe, Schüttkegel)",
                             "value": "bulk"
