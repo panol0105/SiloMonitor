@@ -25,7 +25,7 @@ in der Silo-Liste je Silo das **Volumen (m³)**. Dann gilt:
 - **max. Füllmenge = Volumen × Schüttdichte** (ändert sich mit dem Material)
 
 „Vorhandene Materialien übernehmen“ trägt alle aktuell in den Silos befindlichen Materialien
-in die Liste ein. Der Materialname muss genau dem Wert der Material-Variable entsprechen
+in die Liste ein. Ist eine **Bezeichnung** eingetragen, wird sie im gesamten Dashboard statt des Kürzels angezeigt (Kürzel im Tooltip). Der Materialname muss genau dem Wert der Material-Variable entsprechen
 (Groß-/Kleinschreibung egal). Fehlt Volumen oder Dichte, wird wie bisher die Tonnen-Variable genutzt.
 Wechselt das Material oder wird eine Dichte geändert, rechnet das Modul den Bestand um –
 ohne Fehlbuchung als Verbrauch oder Befüllung.

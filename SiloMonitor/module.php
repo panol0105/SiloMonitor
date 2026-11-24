@@ -245,7 +245,7 @@ class SiloMonitor extends IPSModule
             $ref = $state[$k]['ref'] ?? null;
             $line .= sprintf('%.2f t', $val);
             $line .= $m['src'] === 'pct'
-                ? sprintf(' = %.1f %% × %s m³ × %s t/m³ (%s, max. %.1f t)', $m['pct'], $this->Num($m['volume']), $this->Num($m['density'], 3), $m['mat'], $m['cap'])
+                ? sprintf(' = %.1f %% × %s m³ × %s t/m³ (%s, max. %.1f t)', $m['pct'], $this->Num($m['volume']), $this->Num($m['density'], 3), $this->MaterialLabel($m['mat']), $m['cap'])
                 : ' aus Tonnen-Variable' . ($m['mat'] !== '' && $m['density'] === null ? ' (keine Schüttdichte für „' . $m['mat'] . '“ hinterlegt)' : '');
             $line .= sprintf(' · Var %d, aktualisiert %s', $m['var'], date('d.m. H:i:s', $v['VariableUpdated']));
             $line .= $ref === null ? ' · noch keine Referenz' : sprintf(' · Referenz %.2f t, Differenz %+.2f t', $ref, $val - $ref);
@@ -924,6 +924,7 @@ class SiloMonitor extends IPSModule
             'critical'   => $this->ReadPropertyInteger('CriticalLevel'),
             'refresh'    => $this->ReadPropertyInteger('RefreshSeconds'),
             'siloStyle'  => $this->ReadPropertyString('SiloStyle'),
+            'matNames'   => $this->MaterialNames(),
             'silos'      => $silos,
             'materials'  => array_values($materials),
             'history'    => $history,
@@ -1070,7 +1071,7 @@ class SiloMonitor extends IPSModule
         $mats = [];
         foreach ($this->GetSilos() as $silo) {
             $mat = trim((string) $this->ReadVar($silo['VarMaterial'], ''));
-            $options[] = ['value' => 's:' . $silo['Pos'], 'label' => $silo['Name'] . ($mat !== '' ? ' · ' . $mat : '')];
+            $options[] = ['value' => 's:' . $silo['Pos'], 'label' => $silo['Name'] . ($mat !== '' ? ' · ' . $this->MaterialLabel($mat) : '')];
             if ($mat !== '') {
                 $mats[$mat] = true;
             }
@@ -1080,7 +1081,8 @@ class SiloMonitor extends IPSModule
         }
         ksort($mats);
         foreach (array_keys($mats) as $m) {
-            $options[] = ['value' => 'm:' . $m, 'label' => 'Material ' . $m];
+            $label = $this->MaterialLabel($m);
+            $options[] = ['value' => 'm:' . $m, 'label' => 'Material ' . $label . ($label !== $m ? ' (' . $m . ')' : '')];
         }
 
         $sum = function (array $rows) use ($silos): array {
@@ -1333,6 +1335,25 @@ class SiloMonitor extends IPSModule
                 'density' => $density, 'volume' => $volume, 'src' => 't', 'var' => $silo['VarTons'], 'scale' => 1.0];
         }
         return null;
+    }
+
+    /** Anzeigenamen der Materialien: Kürzel → Bezeichnung (nur wo eine Bezeichnung eingetragen ist) */
+    private function MaterialNames(): array
+    {
+        $names = [];
+        foreach (json_decode($this->ReadPropertyString('Densities'), true) ?: [] as $row) {
+            $code = mb_strtoupper(trim((string) ($row['Material'] ?? '')));
+            $name = trim((string) ($row['Name'] ?? ''));
+            if ($code !== '' && $name !== '') {
+                $names[$code] = $name;
+            }
+        }
+        return $names;
+    }
+
+    private function MaterialLabel(string $mat): string
+    {
+        return $this->MaterialNames()[mb_strtoupper(trim($mat))] ?? $mat;
     }
 
     /** Schüttdichte (t/m³) zum Material, Vergleich ohne Groß-/Kleinschreibung */

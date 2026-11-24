@@ -129,6 +129,8 @@
   td .chip { color: var(--text-2); }
   td.muted { color: var(--muted); }
   td.zero { color: #c9cacb; }
+  td .code { font-size: .75rem; font-weight: 400; color: var(--muted); margin-left: .3rem; }
+  @container (max-width: 620px) { td .code { display: none; } }
   td.strong { color: var(--text); font-weight: 500; }
   .cur { background: var(--primary-soft) !important; }
   th.cur { color: var(--primary); font-weight: 500; }
@@ -316,9 +318,12 @@
   function td(v, cls) { cls = cls || ''; return v > 0.05 ? '<td class="' + cls + '">' + t(v) + '</td>' : '<td class="zero ' + cls + '">–</td>'; }
   function reachCls(r) { return r == null ? '' : (r < 1 ? 'r' : (r < 3 ? 'o' : 'g')); }
   function reachTxt(r) { return r == null ? '–' : (r > 99 ? '> 99' : nf1.format(r)) + ' Tg'; }
+  // Anzeigename eines Materials (Bezeichnung aus den Einstellungen, sonst Kürzel)
+  function mname(m) { return (m && data.matNames && data.matNames[String(m).trim().toUpperCase()]) || m || ''; }
+  function mtitle(m) { var n = mname(m); return n !== m ? n + ' (' + m + ')' : m; }
   function chip(m) {
     if (!m) return '<span class="chip">–</span>';
-    return '<span class="chip" title="' + esc(m) + '"><i style="background:' + (matColor[m] || '#a7a8a9') + '"></i><span class="ct">' + esc(m) + '</span></span>';
+    return '<span class="chip" title="' + esc(mtitle(m)) + '"><i style="background:' + (matColor[m] || '#a7a8a9') + '"></i><span class="ct">' + esc(mname(m)) + '</span></span>';
   }
 
   // ================= Silo-Grafik =================
@@ -554,7 +559,7 @@
     document.getElementById('k1').innerHTML = t(tons) + '<u>t</u>';
     document.getElementById('k1r').textContent = cap > 0 ? nf1.format(tons / cap * 100) + ' % von ' + nf0.format(cap) + ' t' : '';
     document.getElementById('k1bar').innerHTML = cap > 0 ? d.materials.slice().sort(function (a, b) { return a.material < b.material ? -1 : 1; }).map(function (m) {
-      return '<i style="width:' + (m.tons / cap * 100) + '%;background:' + matColor[m.material] + '" title="' + esc(m.material) + '"></i>';
+      return '<i style="width:' + (m.tons / cap * 100) + '%;background:' + matColor[m.material] + '" title="' + esc(mtitle(m.material)) + '"></i>';
     }).join('') : '';
     document.getElementById('k1s').innerHTML = d.silos.length + ' Silos · ' + d.materials.length + ' Materialien · ' +
       (crit ? '<b class="r">' + crit + ' kritisch</b> · ' : '') + (low ? '<b class="o">' + low + ' niedrig</b>' : '<b class="g">alle ok</b>');
@@ -622,7 +627,7 @@
     tbl.innerHTML = head + '<tbody>' + body + '</tbody>' + foot;
 
     // ---- Tabelle Material ----
-    var mrows = d.materials.slice().sort(function (a, b) { return a.material < b.material ? -1 : 1; });
+    var mrows = d.materials.slice().sort(function (a, b) { return mname(a.material).localeCompare(mname(b.material), 'de'); });
     var mt = { tons: 0, cs: 0, cd: 0, avg: 0 }, matShift = {};
     d.silos.forEach(function (s) { if (s.material) matShift[s.material] = (matShift[s.material] || 0) + s.shifts[cur]; });
     document.getElementById('tblMat').innerHTML =
@@ -630,7 +635,8 @@
       (mrows.length ? mrows.map(function (m) {
         m.consShift = matShift[m.material] || 0;
         mt.tons += m.tons; mt.cs += m.consShift; mt.cd += m.consDay; mt.avg += (m.avg7 || 0);
-        return '<tr><td class="name"><i class="dot" style="background:' + matColor[m.material] + '"></i>' + esc(m.material) + '</td>' +
+        return '<tr><td class="name" title="' + esc(mtitle(m.material)) + '"><i class="dot" style="background:' + matColor[m.material] + '"></i>' + esc(mname(m.material)) +
+          (mname(m.material) !== m.material ? ' <span class="code">' + esc(m.material) + '</span>' : '') + '</td>' +
           '<td class="p4 muted" style="text-align:left">' + esc(m.silos.map(function (x) { return x.replace(/^Silo\s*/i, ''); }).join(', ')) + '</td>' +
           td(m.tons, 'strong') + td(m.consShift, 'p2 cur') + td(m.consDay) +
           (m.avg7 == null ? '<td class="zero p2">–</td>' : td(m.avg7, 'p2')) +
