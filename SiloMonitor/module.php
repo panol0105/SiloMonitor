@@ -28,6 +28,8 @@ class SiloMonitor extends IPSModule
         $this->RegisterPropertyString('HookName', 'silomonitor');
         $this->RegisterPropertyString('DashboardURL', '');
         $this->RegisterPropertyString('Silos', json_encode(self::DefaultSilos()));
+        $this->RegisterPropertyString('Densities', '[]');             // Material → Schüttdichte (t/m³)
+        $this->RegisterPropertyBoolean('TonsFromVolume', true);       // Tonnen = % × Volumen × Dichte
 
         $this->RegisterPropertyInteger('ShiftEarly', 6);
         $this->RegisterPropertyInteger('ShiftLate', 14);
@@ -160,10 +162,13 @@ class SiloMonitor extends IPSModule
         $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
         $dirty = false;
         foreach ($this->GetSilos() as $silo) {
-            if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons'])) {
-                $age = $now - (int) IPS_GetVariable($silo['VarTons'])['VariableUpdated'];
-                $dirty = $this->ProcessLevel($silo['Pos'], (float) GetValue($silo['VarTons']), $now, $state, $stats, $events, $age) || $dirty;
+            $m = $this->Measure($silo);
+            if ($m === null) {
+                continue;
             }
+            $this->AdaptState($state, (string) $silo['Pos'], $m, $silo['Name']);
+            $age = $now - (int) IPS_GetVariable($m['var'])['VariableUpdated'];
+            $dirty = $this->ProcessLevel($silo['Pos'], $m['tons'], $now, $state, $stats, $events, $age) || $dirty;
         }
         if ($dirty) {
             $this->WriteAttributeString('State', json_encode($state));
@@ -230,17 +235,22 @@ class SiloMonitor extends IPSModule
         foreach ($silos as $silo) {
             $k = (string) $silo['Pos'];
             $line = $silo['Name'] . ': ';
-            if ($silo['VarTons'] <= 0 || !IPS_VariableExists($silo['VarTons'])) {
-                $out[] = $line . 'FEHLER – Tonnen-Variable ' . $silo['VarTons'] . ' existiert nicht';
+            $m = $this->Measure($silo);
+            if ($m === null) {
+                $out[] = $line . 'FEHLER – weder Tonnen-Variable ' . $silo['VarTons'] . ' noch Füllstand % mit Volumen/Dichte verfügbar';
                 continue;
             }
-            $v = IPS_GetVariable($silo['VarTons']);
-            $val = (float) GetValue($silo['VarTons']);
+            $v = IPS_GetVariable($m['var']);
+            $val = $m['tons'];
             $ref = $state[$k]['ref'] ?? null;
-            $line .= sprintf('%.2f t (Var %d, zuletzt aktualisiert %s)', $val, $silo['VarTons'], date('d.m. H:i:s', $v['VariableUpdated']));
+            $line .= sprintf('%.2f t', $val);
+            $line .= $m['src'] === 'pct'
+                ? sprintf(' = %.1f %% × %s m³ × %s t/m³ (%s, max. %.1f t)', $m['pct'], $this->Num($m['volume']), $this->Num($m['density'], 3), $m['mat'], $m['cap'])
+                : ' aus Tonnen-Variable' . ($m['mat'] !== '' && $m['density'] === null ? ' (keine Schüttdichte für „' . $m['mat'] . '“ hinterlegt)' : '');
+            $line .= sprintf(' · Var %d, aktualisiert %s', $m['var'], date('d.m. H:i:s', $v['VariableUpdated']));
             $line .= $ref === null ? ' · noch keine Referenz' : sprintf(' · Referenz %.2f t, Differenz %+.2f t', $ref, $val - $ref);
             $acIDs = IPS_GetInstanceListByModuleID(self::ARCHIVE_MODULE);
-            $line .= (count($acIDs) && @AC_GetLoggingStatus($acIDs[0], $silo['VarTons'])) ? ' · Archiv: ja' : ' · Archiv: NEIN';
+            $line .= (count($acIDs) && @AC_GetLoggingStatus($acIDs[0], $m['var'])) ? ' · Archiv: ja' : ' · Archiv: NEIN';
             if (!empty($state[$k]['fill'])) {
                 $line .= sprintf(' · Befüllung läuft seit %s (Basis %.2f t)', date('H:i', (int) $state[$k]['fill']['start']), $state[$k]['fill']['base']);
             }
@@ -309,13 +319,15 @@ class SiloMonitor extends IPSModule
         $done = [];
 
         foreach ($this->GetSilos() as $silo) {
-            $var = $silo['VarTons'];
             $k = (string) $silo['Pos'];
-            if ($var <= 0 || !IPS_VariableExists($var) || !@AC_GetLoggingStatus($ac, $var)) {
+            $m = $this->Measure($silo);
+            $var = $m['var'] ?? 0;
+            if ($m === null || !@AC_GetLoggingStatus($ac, $var)) {
                 $report[] = $silo['Name'] . ': nicht archiviert – unverändert';
                 continue;
             }
-            $series = $this->LoadSeries($ac, $var, $warm, $now);
+            // bei berechneten Tonnen: archivierte % × Volumen × aktuelle Schüttdichte
+            $series = array_map(fn ($p) => [$p[0], $p[1] * $m['scale']], $this->LoadSeries($ac, $var, $warm, $now));
             if (count($series) === 0) {
                 $report[] = $silo['Name'] . ': keine Archivwerte im Zeitraum – unverändert';
                 continue;
@@ -335,7 +347,7 @@ class SiloMonitor extends IPSModule
                     $this->ProcessLevel($silo['Pos'], $cur, $t, $st, $tmpStats, $tmpEvents, $t - $curTs);
                 }
             }
-            $state[$k] = $st[$k] ?? ($state[$k] ?? []);
+            $state[$k] = ($st[$k] ?? ($state[$k] ?? [])) + ['src' => $m['src'], 'fac' => $m['scale']];
             $done[$k] = $silo['Name'];
             $report[] = sprintf('%s: %d Archivwerte verarbeitet', $silo['Name'], $n);
         }
@@ -703,9 +715,10 @@ class SiloMonitor extends IPSModule
         $state = $this->GetState();
         foreach ($this->GetSilos() as $silo) {
             $k = (string) $silo['Pos'];
-            if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons']) && ($force || !isset($state[$k]['ref']))) {
-                $v = (float) GetValue($silo['VarTons']);
-                $state[$k] = ['ref' => $v, 'v' => $v, 'vts' => time(), 'low' => time(), 'buf' => [$v], 'last' => time(), 'dir' => 0, 'ts' => 0, 'rate' => $state[$k]['rate'] ?? null, 'lb' => null, 'fill' => null];
+            $m = $this->Measure($silo);
+            if ($m !== null && ($force || !isset($state[$k]['ref']))) {
+                $v = $m['tons'];
+                $state[$k] = ['src' => $m['src'], 'fac' => $m['scale'], 'ref' => $v, 'v' => $v, 'vts' => time(), 'low' => time(), 'buf' => [$v], 'last' => time(), 'dir' => 0, 'ts' => 0, 'rate' => $state[$k]['rate'] ?? null, 'lb' => null, 'fill' => null];
             }
         }
         $this->WriteAttributeString('State', json_encode($state));
@@ -794,16 +807,11 @@ class SiloMonitor extends IPSModule
         foreach ($this->GetSilos() as $silo) {
             $k = (string) $silo['Pos'];
             $names[$silo['Pos']] = $silo['Name'];
-            $tons = $this->ReadVar($silo['VarTons'], 0.0);
-            $pct = $this->ReadVar($silo['VarPercent'], null);
-            $mat = trim((string) $this->ReadVar($silo['VarMaterial'], ''));
-            $cap = (float) $silo['Capacity'];
-            if ($cap <= 0 && $pct !== null && (float) $pct > 2) {
-                $cap = $tons / ((float) $pct / 100);
-            }
-            if ($pct === null) {
-                $pct = $cap > 0 ? $tons / $cap * 100 : 0;
-            }
+            $m = $this->Measure($silo);
+            $tons = $m['tons'] ?? 0.0;
+            $pct = $m['pct'] ?? 0.0;
+            $cap = $m['cap'] ?? 0.0;
+            $mat = $m['mat'] ?? trim((string) $this->ReadVar($silo['VarMaterial'], ''));
 
             $shifts = [];
             for ($s = 1; $s <= 3; $s++) {
@@ -945,15 +953,10 @@ class SiloMonitor extends IPSModule
         $start = $now - $days * 86400;
 
         // Aktueller Stand
-        $tons = (float) $this->ReadVar($silo['VarTons'], 0.0);
-        $pct = $this->ReadVar($silo['VarPercent'], null);
-        $cap = (float) $silo['Capacity'];
-        if ($cap <= 0 && $pct !== null && (float) $pct > 2) {
-            $cap = $tons / ((float) $pct / 100);
-        }
-        if ($pct === null) {
-            $pct = $cap > 0 ? $tons / $cap * 100 : 0;
-        }
+        $m = $this->Measure($silo);
+        $tons = $m['tons'] ?? 0.0;
+        $pct = $m['pct'] ?? 0.0;
+        $cap = $m['cap'] ?? 0.0;
 
         // Tage (mindestens 7 für die Balken)
         $barDays = max(7, $days);
@@ -990,24 +993,25 @@ class SiloMonitor extends IPSModule
         $series = [];
         $archived = false;
         $acIDs = IPS_GetInstanceListByModuleID(self::ARCHIVE_MODULE);
-        $var = $silo['VarTons'];
+        $var = $m['var'] ?? 0;
+        $sc = $m['scale'] ?? 1.0;   // berechnete Tonnen: Archiv enthält %, × Volumen × Dichte
         if (count($acIDs) > 0 && $var > 0 && IPS_VariableExists($var) && @AC_GetLoggingStatus($acIDs[0], $var)) {
             $archived = true;
             $ac = $acIDs[0];
             if ($days <= 1) {
                 $before = @AC_GetLoggedValues($ac, $var, 0, $start - 1, 1) ?: [];
                 if (count($before) > 0) {
-                    $series[] = [$start, round((float) $before[0]['Value'], 2)];
+                    $series[] = [$start, round((float) $before[0]['Value'] * $sc, 2)];
                 }
                 foreach (array_reverse(@AC_GetLoggedValues($ac, $var, $start, $now, 5000) ?: []) as $v) {
-                    $series[] = [(int) $v['TimeStamp'], round((float) $v['Value'], 2)];
+                    $series[] = [(int) $v['TimeStamp'], round((float) $v['Value'] * $sc, 2)];
                 }
                 $series[] = [$now, round($tons, 2)];
                 $series = $this->Downsample($series, 1500);
             } else {
                 // Stundenwerte: Mittel + Min/Max
                 foreach (array_reverse(@AC_GetAggregatedValues($ac, $var, 0, $start, $now, 0) ?: []) as $v) {
-                    $series[] = [(int) $v['TimeStamp'] + 1800, round((float) $v['Avg'], 2), round((float) $v['Min'], 2), round((float) $v['Max'], 2)];
+                    $series[] = [(int) $v['TimeStamp'] + 1800, round((float) $v['Avg'] * $sc, 2), round((float) $v['Min'] * $sc, 2), round((float) $v['Max'] * $sc, 2)];
                 }
                 $series[] = [$now, round($tons, 2), round($tons, 2), round($tons, 2)];
             }
@@ -1035,6 +1039,9 @@ class SiloMonitor extends IPSModule
             'now'        => $now,
             'archived'   => $archived,
             'varTons'    => $var,
+            'density'    => $m['density'] ?? null,
+            'volume'     => ($m['volume'] ?? 0) > 0 ? $m['volume'] : null,
+            'src'        => $m['src'] ?? 't',
             'series'     => $series,
             'days'       => $dayRows,
             'avg'        => $avg,
@@ -1290,6 +1297,129 @@ class SiloMonitor extends IPSModule
         ];
     }
 
+    /**
+     * Aktueller Messwert eines Silos.
+     * Mit Volumen (m³) am Silo und Schüttdichte (t/m³) zum Material:
+     *     Tonnen = Füllstand % × Volumen × Dichte,  max. Füllmenge = Volumen × Dichte
+     * sonst: Tonnen-Variable aus der SPS (wie bisher).
+     * 'scale' = Umrechnung des Archivwerts der Quell-Variable in Tonnen.
+     */
+    private function Measure(array $silo): ?array
+    {
+        $mat = trim((string) $this->ReadVar($silo['VarMaterial'], ''));
+        $density = $this->DensityFor($mat);
+        $volume = (float) ($silo['Volume'] ?? 0);
+        $hasPct = $silo['VarPercent'] > 0 && IPS_VariableExists($silo['VarPercent']);
+        $pct = $hasPct ? (float) GetValue($silo['VarPercent']) : null;
+
+        if ($this->ReadPropertyBoolean('TonsFromVolume') && $volume > 0 && $density !== null && $hasPct) {
+            $f = $volume * $density / 100;
+            return ['tons' => $pct * $f, 'pct' => max(0.0, min(100.0, $pct)), 'cap' => $volume * $density, 'mat' => $mat,
+                'density' => $density, 'volume' => $volume, 'src' => 'pct', 'var' => $silo['VarPercent'], 'scale' => $f];
+        }
+        if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons'])) {
+            $tons = (float) GetValue($silo['VarTons']);
+            $cap = (float) $silo['Capacity'];
+            if ($cap <= 0 && $volume > 0 && $density !== null) {
+                $cap = $volume * $density;
+            }
+            if ($cap <= 0 && $pct !== null && $pct > 2) {
+                $cap = $tons / ($pct / 100);
+            }
+            if ($pct === null) {
+                $pct = $cap > 0 ? $tons / $cap * 100 : 0.0;
+            }
+            return ['tons' => $tons, 'pct' => max(0.0, min(100.0, $pct)), 'cap' => $cap, 'mat' => $mat,
+                'density' => $density, 'volume' => $volume, 'src' => 't', 'var' => $silo['VarTons'], 'scale' => 1.0];
+        }
+        return null;
+    }
+
+    /** Schüttdichte (t/m³) zum Material, Vergleich ohne Groß-/Kleinschreibung */
+    private function DensityFor(string $mat): ?float
+    {
+        static $cache = null;
+        if ($cache === null || $cache[0] !== $this->ReadPropertyString('Densities')) {
+            $map = [];
+            foreach (json_decode($this->ReadPropertyString('Densities'), true) ?: [] as $row) {
+                $key = mb_strtoupper(trim((string) ($row['Material'] ?? '')));
+                if ($key !== '' && (float) ($row['Density'] ?? 0) > 0) {
+                    $map[$key] = (float) $row['Density'];
+                }
+            }
+            $cache = [$this->ReadPropertyString('Densities'), $map];
+        }
+        $key = mb_strtoupper(trim($mat));
+        return $key !== '' ? ($cache[1][$key] ?? null) : null;
+    }
+
+    /**
+     * Passt den gespeicherten Zustand an, wenn sich Material/Dichte oder die Messquelle ändert,
+     * damit dadurch kein Sprung als Befüllung oder Verbrauch gebucht wird.
+     */
+    private function AdaptState(array &$state, string $k, array $m, string $name): void
+    {
+        if (!isset($state[$k]['ref'])) {
+            $state[$k] = ($state[$k] ?? []) + ['src' => $m['src'], 'fac' => $m['scale']];
+            return;
+        }
+        $st = &$state[$k];
+        $oldSrc = $st['src'] ?? 't';
+        if ($oldSrc !== $m['src']) {
+            // Wechsel SPS-Tonnen ↔ berechnet: neu beginnen
+            $keep = ['rate' => $st['rate'] ?? null, 'ra' => $st['ra'] ?? null, 'rd' => $st['rd'] ?? null];
+            $st = array_filter($keep, fn ($v) => $v !== null) + ['src' => $m['src'], 'fac' => $m['scale']];
+            $this->SendDebug('Messquelle', $name . ': ' . ($m['src'] === 'pct' ? '% × Volumen × Dichte' : 'Tonnen-Variable') . ' – Referenz neu', 0);
+            return;
+        }
+        $old = (float) ($st['fac'] ?? $m['scale']);
+        if ($m['src'] === 'pct' && $old > 0 && abs($old - $m['scale']) > 1e-9) {
+            $r = $m['scale'] / $old;
+            foreach (['ref', 'v', 'rate', 'ra'] as $f) {
+                if (isset($st[$f]) && $st[$f] !== null) {
+                    $st[$f] = (float) $st[$f] * $r;
+                }
+            }
+            if (!empty($st['buf'])) {
+                $st['buf'] = array_map(fn ($x) => $x * $r, $st['buf']);
+            }
+            if (!empty($st['fill'])) {
+                $st['fill']['base'] *= $r;
+                $st['fill']['peak'] *= $r;
+                $st['fill']['rate'] *= $r;
+            }
+            $this->SendDebug('Schüttdichte', sprintf('%s: Umrechnung × %.3f (Material %s) – keine Buchung', $name, $r, $m['mat']), 0);
+        }
+        $st['fac'] = $m['scale'];
+    }
+
+    private function Num(float $v, int $digits = 1): string
+    {
+        return rtrim(rtrim(number_format($v, $digits, ',', '.'), '0'), ',');
+    }
+
+    /** Übernimmt alle aktuell in den Silos vorhandenen Materialien in die Dichte-Liste */
+    public function FillMaterials(): void
+    {
+        $rows = json_decode($this->ReadPropertyString('Densities'), true) ?: [];
+        $known = [];
+        foreach ($rows as $r) {
+            $known[mb_strtoupper(trim((string) ($r['Material'] ?? '')))] = true;
+        }
+        $added = 0;
+        foreach ($this->GetSilos() as $silo) {
+            $mat = trim((string) $this->ReadVar($silo['VarMaterial'], ''));
+            if ($mat !== '' && !isset($known[mb_strtoupper($mat)])) {
+                $rows[] = ['Material' => $mat, 'Name' => '', 'Density' => 0];
+                $known[mb_strtoupper($mat)] = true;
+                $added++;
+            }
+        }
+        usort($rows, fn ($a, $b) => strcmp((string) $a['Material'], (string) $b['Material']));
+        $this->UpdateFormField('Densities', 'values', json_encode($rows));
+        echo $added . ' Material(ien) ergänzt – Schüttdichte eintragen und „Änderungen übernehmen“.';
+    }
+
     private function GetSilos(): array
     {
         $list = json_decode($this->ReadPropertyString('Silos'), true) ?: [];
@@ -1309,6 +1439,7 @@ class SiloMonitor extends IPSModule
                 'VarTons'     => (int) ($row['VarTons'] ?? 0),
                 'VarMaterial' => (int) ($row['VarMaterial'] ?? 0),
                 'Capacity'    => (float) ($row['Capacity'] ?? 0),
+                'Volume'      => (float) ($row['Volume'] ?? 0),
             ];
         }
         ksort($result);
@@ -1386,7 +1517,7 @@ class SiloMonitor extends IPSModule
         ];
         $rows = [];
         foreach ($ids as $pos => [$p, $t, $m]) {
-            $rows[] = ['Pos' => $pos, 'Active' => true, 'Name' => 'Silo ' . $pos, 'VarPercent' => $p, 'VarTons' => $t, 'VarMaterial' => $m, 'Capacity' => 0];
+            $rows[] = ['Pos' => $pos, 'Active' => true, 'Name' => 'Silo ' . $pos, 'VarPercent' => $p, 'VarTons' => $t, 'VarMaterial' => $m, 'Capacity' => 0, 'Volume' => 0];
         }
         return $rows;
     }

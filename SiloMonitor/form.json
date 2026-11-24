@@ -76,13 +76,89 @@
                 {
                     "caption": "Kapazität t (0 = auto)",
                     "name": "Capacity",
-                    "width": "auto",
+                    "width": "170px",
                     "add": 0,
                     "edit": {
                         "type": "NumberSpinner",
                         "digits": 1,
                         "suffix": " t"
                     }
+                },
+                {
+                    "caption": "Volumen m³",
+                    "name": "Volume",
+                    "width": "auto",
+                    "add": 0,
+                    "edit": {
+                        "type": "NumberSpinner",
+                        "digits": 1,
+                        "suffix": " m³"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Materialien & Schüttdichte",
+            "expanded": true,
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "Ist am Silo ein Volumen eingetragen und für sein Material eine Schüttdichte hinterlegt, gilt: Tonnen = Füllstand % × Volumen × Schüttdichte, max. Füllmenge = Volumen × Schüttdichte. Sonst wird die Tonnen-Variable verwendet."
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "TonsFromVolume",
+                    "caption": "Tonnen aus Füllstand %, Volumen und Schüttdichte berechnen"
+                },
+                {
+                    "type": "List",
+                    "name": "Densities",
+                    "caption": "Schüttdichte je Material (Materialname genau wie in der Material-Variable)",
+                    "rowCount": 8,
+                    "add": true,
+                    "delete": true,
+                    "sort": {
+                        "column": "Material",
+                        "direction": "ascending"
+                    },
+                    "columns": [
+                        {
+                            "caption": "Material",
+                            "name": "Material",
+                            "width": "220px",
+                            "add": "",
+                            "edit": {
+                                "type": "ValidationTextBox"
+                            }
+                        },
+                        {
+                            "caption": "Bezeichnung (optional)",
+                            "name": "Name",
+                            "width": "260px",
+                            "add": "",
+                            "edit": {
+                                "type": "ValidationTextBox"
+                            }
+                        },
+                        {
+                            "caption": "Schüttdichte",
+                            "name": "Density",
+                            "width": "auto",
+                            "add": 0,
+                            "edit": {
+                                "type": "NumberSpinner",
+                                "digits": 3,
+                                "minimum": 0,
+                                "suffix": " t/m³"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "type": "Button",
+                    "caption": "Vorhandene Materialien übernehmen",
+                    "onClick": "SILO_FillMaterials($id);"
                 }
             ]
         },

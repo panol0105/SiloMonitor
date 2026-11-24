@@ -16,6 +16,23 @@ Zeigt die Füllstände von bis zu **12 Silos** als FullHD-Dashboard und berechne
    → am Anzeige-PC im Kiosk-Modus (z. B. `chrome --kiosk <URL>`).
    Die Seite skaliert automatisch auf jede Auflösung (ausgelegt für 1920×1080).
 
+## Schüttdichte je Material
+
+Unter **„Materialien & Schüttdichte“** wird je Material die Schüttdichte (t/m³) eingetragen,
+in der Silo-Liste je Silo das **Volumen (m³)**. Dann gilt:
+
+- **Tonnen = Füllstand % × Volumen × Schüttdichte**
+- **max. Füllmenge = Volumen × Schüttdichte** (ändert sich mit dem Material)
+
+„Vorhandene Materialien übernehmen“ trägt alle aktuell in den Silos befindlichen Materialien
+in die Liste ein. Der Materialname muss genau dem Wert der Material-Variable entsprechen
+(Groß-/Kleinschreibung egal). Fehlt Volumen oder Dichte, wird wie bisher die Tonnen-Variable genutzt.
+Wechselt das Material oder wird eine Dichte geändert, rechnet das Modul den Bestand um –
+ohne Fehlbuchung als Verbrauch oder Befüllung.
+
+Voraussetzung: Die %-Variable gibt den **Volumen**-Füllgrad an (bei reiner Höhenmessung
+ist der Konus nicht linear).
+
 ## Schrift
 
 Das Dashboard nutzt **Poppins** (wie die Trafo-Übersicht). Ist sie auf dem

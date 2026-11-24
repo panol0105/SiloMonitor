@@ -781,7 +781,9 @@
       '<button class="x" id="mclose" title="Schließen (Esc)">×</button></div>' +
 
       '<div class="mkpis">' +
-        '<div class="mk"><div class="l">Bestand jetzt</div><div class="v">' + t(m.tons) + '<u>t</u></div><div class="s"><b class="' + status + '">' + nf1.format(m.percent) + ' %</b>' + (m.capacity ? ' von ' + nf0.format(m.capacity) + ' t' : '') + '</div></div>' +
+        '<div class="mk"><div class="l">Bestand jetzt</div><div class="v">' + t(m.tons) + '<u>t</u></div><div class="s"><b class="' + status + '">' + nf1.format(m.percent) + ' %</b>' + (m.capacity ? ' von ' + nf1.format(m.capacity) + ' t' : '') +
+          (m.src === 'pct' ? '<br>' + nf1.format(m.volume) + ' m³ × ' + new Intl.NumberFormat('de-DE', { maximumFractionDigits: 3 }).format(m.density) + ' t/m³'
+            : (m.density == null && m.material ? '<br>keine Schüttdichte hinterlegt' : '')) + '</div></div>' +
         '<div class="mk"><div class="l">Ø Verbrauch / Tag</div><div class="v">' + (m.avg.day == null ? '–' : t(m.avg.day) + '<u>t</u>') + '</div><div class="s">' +
           [1, 2, 3].map(function (i) { return m.shiftNames[i] + ' <b>' + (m.avg['s' + i] == null ? '–' : t(m.avg['s' + i])) + '</b>'; }).join(' · ') + (m.avgDays ? ' · ' + m.avgDays + ' Tage' : '') + '</div></div>' +
         '<div class="mk"><div class="l">Befüllungen (' + rangeTxt[m.range] + ')</div><div class="v">' + m.fills.length + '<u>× · ' + t(fillSum) + ' t</u></div><div class="s">' +
