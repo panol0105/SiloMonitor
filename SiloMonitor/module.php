@@ -159,7 +159,8 @@ class SiloMonitor extends IPSModule
         $dirty = false;
         foreach ($this->GetSilos() as $silo) {
             if ($silo['VarTons'] > 0 && IPS_VariableExists($silo['VarTons'])) {
-                $dirty = $this->ProcessLevel($silo['Pos'], (float) GetValue($silo['VarTons']), $now, $state, $stats, $events) || $dirty;
+                $age = $now - (int) IPS_GetVariable($silo['VarTons'])['VariableUpdated'];
+                $dirty = $this->ProcessLevel($silo['Pos'], (float) GetValue($silo['VarTons']), $now, $state, $stats, $events, $age) || $dirty;
             }
         }
         if ($dirty) {
@@ -236,6 +237,11 @@ class SiloMonitor extends IPSModule
             $ref = $state[$k]['ref'] ?? null;
             $line .= sprintf('%.2f t (Var %d, zuletzt aktualisiert %s)', $val, $silo['VarTons'], date('d.m. H:i:s', $v['VariableUpdated']));
             $line .= $ref === null ? ' · noch keine Referenz' : sprintf(' · Referenz %.2f t, Differenz %+.2f t', $ref, $val - $ref);
+            $acIDs = IPS_GetInstanceListByModuleID(self::ARCHIVE_MODULE);
+            $line .= (count($acIDs) && @AC_GetLoggingStatus($acIDs[0], $silo['VarTons'])) ? ' · Archiv: ja' : ' · Archiv: NEIN';
+            if (!empty($state[$k]['fill'])) {
+                $line .= sprintf(' · Befüllung läuft seit %s (Basis %.2f t)', date('H:i', (int) $state[$k]['fill']['start']), $state[$k]['fill']['base']);
+            }
             if (!empty($state[$k]['ts'])) {
                 $line .= ' · letzte Buchung ' . date('H:i', (int) $state[$k]['ts']);
             }
@@ -265,6 +271,157 @@ class SiloMonitor extends IPSModule
         $text = implode("\n", $out);
         echo $text;
         return $text;
+    }
+
+    /**
+     * Berechnet Verbrauch und Befüllungen der letzten $Days Produktionstage (inkl. heute) neu,
+     * indem die archivierten Tonnen-Werte durch die aktuelle Erfassungslogik gespielt werden.
+     * Silos ohne Archivierung bleiben unverändert.
+     */
+    public function RecalculateFromArchive(int $Days): string
+    {
+        $t0 = microtime(true);
+        $Days = max(1, min(14, $Days));
+        $acIDs = IPS_GetInstanceListByModuleID(self::ARCHIVE_MODULE);
+        if (count($acIDs) === 0) {
+            echo 'Kein Archiv gefunden.';
+            return 'Kein Archiv gefunden.';
+        }
+        $ac = $acIDs[0];
+        $now = time();
+        $today = $this->ShiftInfo($now)['day'];
+        $startDay = date('Y-m-d', strtotime($today . ' 12:00 -' . ($Days - 1) . ' days'));
+        $from = strtotime($startDay . ' ' . sprintf('%02d:00', $this->ReadPropertyInteger('ShiftEarly')));
+        $warm = $from - 3 * 3600;                         // Vorlauf für Referenz und Verbrauchsrate
+        $step = max(30, $this->ReadPropertyInteger('SampleInterval'));
+        if ($Days > 3) {
+            $step = max($step, 60);
+        }
+
+        $stats = $this->GetStats();
+        $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
+        $state = $this->GetState();
+        $tmpStats = ['S' => [], 'D' => []];
+        $tmpEvents = [];
+        $report = [];
+        $done = [];
+
+        foreach ($this->GetSilos() as $silo) {
+            $var = $silo['VarTons'];
+            $k = (string) $silo['Pos'];
+            if ($var <= 0 || !IPS_VariableExists($var) || !@AC_GetLoggingStatus($ac, $var)) {
+                $report[] = $silo['Name'] . ': nicht archiviert – unverändert';
+                continue;
+            }
+            $series = $this->LoadSeries($ac, $var, $warm, $now);
+            if (count($series) === 0) {
+                $report[] = $silo['Name'] . ': keine Archivwerte im Zeitraum – unverändert';
+                continue;
+            }
+            $st = [];
+            $n = count($series);
+            $idx = 0;
+            $cur = null;
+            $curTs = $warm;
+            for ($t = $warm; $t <= $now; $t += $step) {
+                while ($idx < $n && $series[$idx][0] <= $t) {
+                    $cur = $series[$idx][1];
+                    $curTs = $series[$idx][0];
+                    $idx++;
+                }
+                if ($cur !== null) {
+                    $this->ProcessLevel($silo['Pos'], $cur, $t, $st, $tmpStats, $tmpEvents, $t - $curTs);
+                }
+            }
+            $state[$k] = $st[$k] ?? ($state[$k] ?? []);
+            $done[$k] = $silo['Name'];
+            $report[] = sprintf('%s: %d Archivwerte verarbeitet', $silo['Name'], $n);
+        }
+
+        if (count($done) > 0) {
+            // alte Werte der neu berechneten Silos ab Starttag ersetzen
+            foreach (['S', 'D'] as $type) {
+                foreach ($stats[$type] as $key => $rows) {
+                    if (substr((string) $key, 0, 10) >= $startDay) {
+                        foreach (array_keys($done) as $k) {
+                            unset($stats[$type][$key][$k]);
+                        }
+                    }
+                }
+                foreach ($tmpStats[$type] as $key => $rows) {
+                    if (substr((string) $key, 0, 10) >= $startDay) {
+                        foreach ($rows as $k => $row) {
+                            $stats[$type][$key][$k] = $row;
+                        }
+                    }
+                }
+            }
+            $events = array_values(array_filter($events, fn ($e) => !(isset($done[(string) $e['s']]) && $e['start'] >= $from)));
+            foreach ($tmpEvents as $e) {
+                if ($e['start'] >= $from) {
+                    $events[] = $e;
+                }
+            }
+            usort($events, fn ($a, $b) => $a['start'] <=> $b['start']);
+            $this->WriteAttributeString('Stats', json_encode($stats));
+            $this->WriteAttributeString('Events', json_encode($events));
+            $this->WriteAttributeString('State', json_encode($state));
+            $this->UpdateVariables();
+            $this->RefreshCache();
+
+            // Ergebnis je Tag
+            $report[] = '';
+            $report[] = 'Ergebnis (Befüllung / Verbrauch in t):';
+            for ($d = $startDay; $d <= $today; $d = date('Y-m-d', strtotime($d . ' 12:00 +1 day'))) {
+                $line = '  ' . date('d.m.', strtotime($d)) . ': ';
+                $parts = [];
+                foreach ($done as $k => $name) {
+                    $r = $stats['D'][$d][$k] ?? ['c' => 0, 'f' => 0];
+                    if ($r['f'] > 0.05 || $r['c'] > 0.05) {
+                        $parts[] = sprintf('%s +%.1f / −%.1f', $name, $r['f'], $r['c']);
+                    }
+                }
+                $report[] = $line . (count($parts) ? implode(' · ', $parts) : '–');
+            }
+        }
+        $report[] = '';
+        $report[] = sprintf('Dauer: %.1f s', microtime(true) - $t0);
+        $text = implode("\n", $report);
+        echo $text;
+        return $text;
+    }
+
+    /** Archivwerte aufsteigend als [[ts, wert], …]; bei sehr vielen Rohwerten 1-Minuten-Mittel */
+    private function LoadSeries(int $ac, int $var, int $from, int $to): array
+    {
+        $out = [];
+        $before = @AC_GetLoggedValues($ac, $var, 0, $from - 1, 1) ?: [];
+        if (count($before) > 0) {
+            $out[] = [$from, (float) $before[0]['Value']];
+        }
+        $raw = [];
+        $end = $to;
+        for ($page = 0; $page < 20; $page++) {
+            $chunk = @AC_GetLoggedValues($ac, $var, $from, $end, 10000) ?: [];
+            foreach ($chunk as $v) {
+                $raw[] = [(int) $v['TimeStamp'], (float) $v['Value']];
+            }
+            if (count($chunk) < 10000) {
+                break;
+            }
+            $end = (int) $chunk[count($chunk) - 1]['TimeStamp'] - 1;
+        }
+        if (count($raw) >= 200000) {
+            // zu viele Rohwerte → 1-Minuten-Aggregation des Archivs
+            $raw = [];
+            for ($d = $from; $d < $to; $d += 86400) {
+                foreach (@AC_GetAggregatedValues($ac, $var, 6, $d, min($to, $d + 86399), 0) ?: [] as $v) {
+                    $raw[] = [(int) $v['TimeStamp'] + 30, (float) $v['Avg']];
+                }
+            }
+        }
+        usort($raw, fn ($a, $b) => $a[0] <=> $b[0]);
+        return array_merge($out, $raw);
     }
 
     /** Liefert alle Daten des Dashboards als JSON (auch für eigene Skripte nutzbar) */
@@ -337,7 +494,7 @@ class SiloMonitor extends IPSModule
      *     Ende nach FillSettle min ohne neuen Höchststand. Menge = Höchststand − Stand vorher
      *     + geschätzte Entnahme während der Befüllung (Verbrauchsrate der 60 min davor).
      */
-    private function ProcessLevel(int $pos, float $raw, int $ts, array &$state, array &$stats, array &$events): bool
+    private function ProcessLevel(int $pos, float $raw, int $ts, array &$state, array &$stats, array &$events, int $age = 0): bool
     {
         $k = (string) $pos;
         $s = $state[$k] ?? [];
@@ -347,6 +504,12 @@ class SiloMonitor extends IPSModule
         $buf = $s['buf'] ?? [];
         if (isset($s['last']) && $ts - (int) $s['last'] > 300) {
             $buf = []; // nach einer Lücke nicht mit alten Werten mitteln
+        }
+        if ($age > 120) {
+            $s['stale'] = true;      // Wert wird nicht mehr aktualisiert
+        } elseif (!empty($s['stale'])) {
+            $buf = [];               // erster frischer Wert nach einer Lücke: eingefrorene Werte verwerfen
+            unset($s['stale']);
         }
         $buf[] = $raw;
         $buf = array_slice($buf, -max(1, $this->ReadPropertyInteger('MedianSamples')));
@@ -449,7 +612,15 @@ class SiloMonitor extends IPSModule
         $s['dir'] = 1;
         $s['ts'] = $ts;
 
-        $settled = $ts - $f['peakTs'] >= $this->ReadPropertyInteger('FillSettle') * 60;
+        $settleSec = $this->ReadPropertyInteger('FillSettle') * 60;
+        $settled = $ts - $f['peakTs'] >= $settleSec;
+        if ($settled && $age > 120 && $ts - $f['peakTs'] < $settleSec + 3600) {
+            // Messwert seit > 2 min nicht aktualisiert (Ausfall?) → Befüllung noch nicht abschließen
+            $settled = false;
+            $s['fill'] = $f;
+            $state[$k] = $s;
+            return true;
+        }
         if ($settled || $ts - $f['start'] > 6 * 3600) {
             if ($this->ReadPropertyBoolean('FillCompensate') && $ts > $f['peakTs']) {
                 // tatsächliche Verbrauchsrate im Nachlauf messen und mit der Rate vorher mitteln

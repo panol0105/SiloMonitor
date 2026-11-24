@@ -52,6 +52,13 @@ Messung (Schüttdichte), nicht an der Erfassung.
 Für die Füllstandslinie im Popup muss die **Tonnen-Variable** jedes Silos archiviert werden
 (Variable auswählen → Archivierung aktivieren). Balken, Befüllungsliste und Prognose funktionieren auch ohne.
 
+## Neu berechnen aus dem Archiv
+
+Ist die Tonnen-Variable eines Silos archiviert, lassen sich Verbrauch und Befüllungen rückwirkend
+(bis 14 Produktionstage) mit der aktuellen Erfassungslogik neu berechnen:
+Instanz → **„Aus Archiv neu berechnen …“**. Silos ohne Archivierung bleiben unverändert.
+Deshalb: **Archivierung für alle Tonnen-Variablen einschalten.**
+
 ## Variablen (archivierbar)
 
 Je Silo: *Verbrauch Schicht*, *Verbrauch Tag*, *Befüllung Tag*; dazu Summen und
@@ -62,7 +69,8 @@ Für Langzeitauswertungen einfach die Archivierung der Tag-Variablen aktivieren.
 
 ```php
 SILO_Update($id);                              // sofort erfassen und Anzeige neu berechnen
-SILO_Diagnose($id);                            // Prüfbericht (WebHook, Variablen, Referenzen)
+SILO_Diagnose($id);                            // Prüfbericht (WebHook, Variablen, Archiv, letzte Befüllungen)
+SILO_RecalculateFromArchive($id, 2);           // letzte 2 Produktionstage aus dem Archiv neu berechnen
 SILO_ResetReference($id);                      // aktuelle Füllstände als Referenz übernehmen
 SILO_ResetStatistics($id);                     // komplette Historie löschen
 SILO_GetDashboardData($id);                    // alle Daten als JSON

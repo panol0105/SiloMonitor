@@ -247,6 +247,32 @@
         },
         {
             "type": "PopupButton",
+            "caption": "Aus Archiv neu berechnen …",
+            "popup": {
+                "caption": "Verbrauch und Befüllungen aus den archivierten Tonnen-Werten neu berechnen",
+                "items": [
+                    {
+                        "type": "Label",
+                        "caption": "Die archivierten Füllstände werden durch die aktuelle Erfassungslogik gespielt und ersetzen die gespeicherten Werte der gewählten Tage. Silos ohne Archivierung bleiben unverändert."
+                    },
+                    {
+                        "type": "NumberSpinner",
+                        "name": "RecalcDays",
+                        "caption": "Produktionstage (inkl. heute)",
+                        "minimum": 1,
+                        "maximum": 14,
+                        "value": 2
+                    },
+                    {
+                        "type": "Button",
+                        "caption": "Neu berechnen",
+                        "onClick": "SILO_RecalculateFromArchive($id, $RecalcDays);"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "PopupButton",
             "caption": "Statistik löschen …",
             "popup": {
                 "caption": "Gesamte Verbrauchs- und Befüllungshistorie löschen?",
