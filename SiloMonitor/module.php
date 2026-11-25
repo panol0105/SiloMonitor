@@ -370,6 +370,8 @@ class SiloMonitor extends IPSModule
                     }
                 }
             }
+            // eingetragene Lieferschein-Mengen merken (werden auf die neu erkannten Befüllungen übertragen)
+            $delivered = array_values(array_filter($events, fn ($e) => isset($done[(string) $e['s']]) && $e['start'] >= $from && isset($e['dlv'])));
             $events = array_values(array_filter($events, fn ($e) => !(isset($done[(string) $e['s']]) && $e['start'] >= $from)));
             foreach ($tmpEvents as $e) {
                 if ($e['start'] >= $from) {
@@ -377,6 +379,23 @@ class SiloMonitor extends IPSModule
                 }
             }
             usort($events, fn ($a, $b) => $a['start'] <=> $b['start']);
+            $kept = 0;
+            foreach ($delivered as $old) {
+                $best = null;
+                foreach ($events as $i => $e) {
+                    if ($e['s'] === $old['s'] && empty($e['open']) && abs($e['start'] - $old['start']) <= 1800
+                        && ($best === null || abs($e['start'] - $old['start']) < abs($events[$best]['start'] - $old['start']))) {
+                        $best = $i;
+                    }
+                }
+                if ($best !== null) {
+                    $this->ApplyDelivered($stats, $events[$best], (float) $old['dlv']);
+                    $kept++;
+                }
+            }
+            if (count($delivered) > 0) {
+                $report[] = sprintf('Lieferschein-Mengen übernommen: %d von %d', $kept, count($delivered));
+            }
             $this->WriteAttributeString('Stats', json_encode($stats));
             $this->WriteAttributeString('Events', json_encode($events));
             $this->WriteAttributeString('State', json_encode($state));
@@ -438,6 +457,72 @@ class SiloMonitor extends IPSModule
         return array_merge($out, $raw);
     }
 
+    /**
+     * Trägt die tatsächlich befüllte Menge (Lieferschein) zu einer Befüllung ein.
+     * $Start = Beginn der Befüllung (Unix-Zeit), $Tons <= 0 entfernt den Eintrag (Messwert gilt wieder).
+     * Der Verbrauch wird um dieselbe Differenz korrigiert, damit die Bilanz zum Füllstand passt.
+     */
+    public function SetDelivered(int $Pos, int $Start, float $Tons): bool
+    {
+        $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
+        foreach ($events as $i => $e) {
+            if ($e['s'] === $Pos && (int) $e['start'] === $Start) {
+                if (!empty($e['open']) || $Tons > 1000) {
+                    return false; // läuft noch / unplausibel
+                }
+                $stats = $this->GetStats();
+                $this->ApplyDelivered($stats, $events[$i], $Tons);
+                $this->WriteAttributeString('Stats', json_encode($stats));
+                $this->WriteAttributeString('Events', json_encode($events));
+                $this->SendDebug('Lieferschein', sprintf('Silo %d, %s: %s', $Pos, date('d.m. H:i', $Start), $Tons > 0 ? $Tons . ' t' : 'entfernt'), 0);
+                $this->UpdateVariables();
+                $this->RefreshCache();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Geliefertes Material laut Lieferschein zu einer Befüllung ('' = Eintrag entfernen) */
+    public function SetDeliveredMaterial(int $Pos, int $Start, string $Material): bool
+    {
+        $events = json_decode($this->ReadAttributeString('Events'), true) ?: [];
+        foreach ($events as $i => $e) {
+            if ($e['s'] === $Pos && (int) $e['start'] === $Start) {
+                $Material = trim($Material);
+                if ($Material === '') {
+                    unset($events[$i]['dmat']);
+                } else {
+                    $events[$i]['dmat'] = mb_substr($Material, 0, 60);
+                }
+                $this->WriteAttributeString('Events', json_encode($events));
+                $this->RefreshCache();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function ApplyDelivered(array &$stats, array &$e, float $tons): void
+    {
+        if (!isset($e['meas'])) {
+            $e['meas'] = (float) $e['t'];          // gemessene Menge einmalig sichern
+        }
+        $new = $tons > 0 ? $tons : (float) $e['meas'];
+        $delta = $new - (float) $e['t'];
+        if (abs($delta) > 0.0001) {
+            $k = (string) $e['s'];
+            $this->Book($stats, $k, 'f', $delta, (int) $e['start']);
+            $this->Book($stats, $k, 'c', $delta, (int) $e['end']);   // Bilanz bleibt stimmig
+        }
+        $e['t'] = round($new, 3);
+        if ($tons > 0) {
+            $e['dlv'] = round($tons, 3);
+        } else {
+            unset($e['dlv']);
+        }
+    }
+
     /** Liefert alle Daten des Dashboards als JSON (auch für eigene Skripte nutzbar) */
     public function GetDashboardData(): string
     {
@@ -470,6 +555,21 @@ class SiloMonitor extends IPSModule
             header('Content-Type: font/ttf');
             header('Cache-Control: public, max-age=604800');
             readfile($file);
+            return;
+        }
+        if (isset($_GET['delivered'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            $req = $_POST + $_GET;
+            if (isset($req['material'])) {
+                echo json_encode(['ok' => $this->SetDeliveredMaterial((int) ($req['pos'] ?? 0), (int) ($req['start'] ?? 0), (string) $req['material'])]);
+                return;
+            }
+            $raw = str_replace(',', '.', trim((string) ($req['tons'] ?? '')));
+            $ok = is_numeric($raw) || $raw === ''
+                ? $this->SetDelivered((int) ($req['pos'] ?? 0), (int) ($req['start'] ?? 0), $raw === '' ? 0.0 : (float) $raw)
+                : false;
+            echo json_encode(['ok' => $ok]);
             return;
         }
         if (isset($_GET['bal'])) {
@@ -673,6 +773,10 @@ class SiloMonitor extends IPSModule
                 if ($idx !== null) {
                     unset($events[$idx]['open']);
                     $events[$idx] += ['peak' => round($f['peak'], 2), 'comp' => round($comp, 2), 'after' => round($v, 2)];
+                    $events[$idx] += ['mat' => (string) ($s['mat'] ?? '')];   // Material im Silo zum Messzeitpunkt
+                    if (($s['src'] ?? 't') === 'pct' && !empty($s['fac'])) {
+                        $events[$idx] += ['fac' => (float) $s['fac']];          // t je %-Punkt – für den Dichte-Vorschlag
+                    }
                 }
                 $this->SendDebug('Befüllung Ende', sprintf('Silo %d: %.2f → %.2f t, + %.2f t Entnahme = %.2f t', $pos, $f['base'], $f['peak'], $comp, $amount), 0);
             }
@@ -906,6 +1010,8 @@ class SiloMonitor extends IPSModule
                 'base'    => $e['base'] ?? null,
                 'peak'    => $e['peak'] ?? null,
                 'comp'    => $e['comp'] ?? null,
+                'dlv'     => $e['dlv'] ?? null,
+                'wrong'   => isset($e['dmat'], $e['mat']) && mb_strtoupper(trim($e['dmat'])) !== mb_strtoupper(trim($e['mat'])),
                 'today'   => $this->ShiftInfo((int) $e['start'])['day'] === $day,
             ];
         }
@@ -986,7 +1092,9 @@ class SiloMonitor extends IPSModule
         foreach (json_decode($this->ReadAttributeString('Events'), true) ?: [] as $e) {
             if ($e['s'] === $pos && $e['end'] >= $start) {
                 $fills[] = ['start' => $e['start'], 'end' => $e['end'], 'tons' => round((float) $e['t'], 2), 'running' => !empty($e['open']),
-                    'base' => $e['base'] ?? null, 'peak' => $e['peak'] ?? null, 'comp' => $e['comp'] ?? null];
+                    'base' => $e['base'] ?? null, 'peak' => $e['peak'] ?? null, 'comp' => $e['comp'] ?? null,
+                    'meas' => isset($e['meas']) ? round((float) $e['meas'], 2) : null, 'dlv' => $e['dlv'] ?? null,
+                    'mat' => $e['mat'] ?? null, 'dmat' => $e['dmat'] ?? null];
             }
         }
 
@@ -1041,6 +1149,8 @@ class SiloMonitor extends IPSModule
             'archived'   => $archived,
             'varTons'    => $var,
             'density'    => $m['density'] ?? null,
+            'check'      => $this->DeliveryCheck($pos, $m),
+            'matList'    => $this->MaterialList(),
             'volume'     => ($m['volume'] ?? 0) > 0 ? $m['volume'] : null,
             'src'        => $m['src'] ?? 't',
             'series'     => $series,
@@ -1180,6 +1290,41 @@ class SiloMonitor extends IPSModule
             'shiftNames' => [1 => 'Früh', 2 => 'Spät', 3 => 'Nacht'],
             'shiftTimes' => $this->ShiftTimes(),
         ];
+    }
+
+    /**
+     * Abgleich Messung ↔ Lieferschein der letzten 90 Tage für ein Silo.
+     * Bei berechneten Tonnen (% × Volumen × Dichte) daraus ein Vorschlag für die Schüttdichte des aktuellen Materials.
+     */
+    private function DeliveryCheck(int $pos, ?array $m): ?array
+    {
+        $min = time() - 90 * 86400;
+        $sumMeas = 0.0;
+        $sumDlv = 0.0;
+        $n = 0;
+        $volDlv = 0.0;   // Lieferschein-t der Befüllungen mit gleichem Material und berechneten Tonnen
+        $volM3 = 0.0;    // dabei gemessenes Volumen in m³
+        $nRho = 0;
+        $curMat = mb_strtoupper(trim((string) ($m['mat'] ?? '')));
+        foreach (json_decode($this->ReadAttributeString('Events'), true) ?: [] as $e) {
+            if ($e['s'] === $pos && isset($e['dlv'], $e['meas']) && $e['start'] >= $min && $e['meas'] > 0.5) {
+                $sumMeas += (float) $e['meas'];
+                $sumDlv += (float) $e['dlv'];
+                $n++;
+                if (!empty($e['fac']) && ($m['volume'] ?? 0) > 0 && mb_strtoupper(trim((string) ($e['dmat'] ?? $e['mat'] ?? ''))) === $curMat
+                    && mb_strtoupper(trim((string) ($e['mat'] ?? ''))) === $curMat) {
+                    $volM3 += (float) $e['meas'] / (float) $e['fac'] * $m['volume'] / 100;
+                    $volDlv += (float) $e['dlv'];
+                    $nRho++;
+                }
+            }
+        }
+        if ($n === 0) {
+            return null;
+        }
+        $dev = ($sumMeas - $sumDlv) / $sumDlv * 100;   // + = Messung zu hoch
+        $suggest = ($nRho >= 2 && $volM3 > 0 && $curMat !== '') ? round($volDlv / $volM3, 3) : null;
+        return ['n' => $n, 'dev' => round($dev, 1), 'suggest' => $suggest, 'nRho' => $nRho, 'material' => $m['mat'] ?? '', 'density' => $m['density'] ?? null];
     }
 
     /** Reduziert eine Zeitreihe auf max. $max Punkte (Min/Max je Eimer bleiben erhalten) */
@@ -1351,6 +1496,27 @@ class SiloMonitor extends IPSModule
         return $names;
     }
 
+    /** Alle bekannten Materialkürzel (Dichte-Liste + aktuell in Silos) */
+    private function MaterialList(): array
+    {
+        $list = [];
+        foreach (json_decode($this->ReadPropertyString('Densities'), true) ?: [] as $row) {
+            $c = trim((string) ($row['Material'] ?? ''));
+            if ($c !== '') {
+                $list[mb_strtoupper($c)] = $c;
+            }
+        }
+        foreach ($this->GetSilos() as $silo) {
+            $c = trim((string) $this->ReadVar($silo['VarMaterial'], ''));
+            if ($c !== '') {
+                $list[mb_strtoupper($c)] = $list[mb_strtoupper($c)] ?? $c;
+            }
+        }
+        $out = array_values($list);
+        sort($out);
+        return $out;
+    }
+
     private function MaterialLabel(string $mat): string
     {
         return $this->MaterialNames()[mb_strtoupper(trim($mat))] ?? $mat;
@@ -1381,7 +1547,7 @@ class SiloMonitor extends IPSModule
     private function AdaptState(array &$state, string $k, array $m, string $name): void
     {
         if (!isset($state[$k]['ref'])) {
-            $state[$k] = ($state[$k] ?? []) + ['src' => $m['src'], 'fac' => $m['scale']];
+            $state[$k] = ['mat' => $m['mat']] + ($state[$k] ?? []) + ['src' => $m['src'], 'fac' => $m['scale']];
             return;
         }
         $st = &$state[$k];
@@ -1412,6 +1578,7 @@ class SiloMonitor extends IPSModule
             $this->SendDebug('Schüttdichte', sprintf('%s: Umrechnung × %.3f (Material %s) – keine Buchung', $name, $r, $m['mat']), 0);
         }
         $st['fac'] = $m['scale'];
+        $st['mat'] = $m['mat'];
     }
 
     private function Num(float $v, int $digits = 1): string

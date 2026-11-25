@@ -129,6 +129,13 @@
   td .chip { color: var(--text-2); }
   td.muted { color: var(--muted); }
   td.zero { color: #c9cacb; }
+  input.dlv { width: 6.5rem; font: inherit; font-size: .93rem; text-align: right; padding: .25rem .5rem; border: 1px solid #d5d8dc; border-radius: 8px; background: #fff; color: var(--text); }
+  input.dlv:focus, select.dmat:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+  select.dmat { font: inherit; font-size: .88rem; padding: .25rem .4rem; border: 1px solid #d5d8dc; border-radius: 8px; background: #fff; color: var(--text); max-width: 14rem; }
+  input.dlv.saving, select.dmat.saving { opacity: .5; } input.dlv.bad, select.dmat.bad { border-color: var(--critical); background: var(--critical-soft); }
+  tr.wrongmat td { background: #fff6f6; }
+  .warnmat { color: var(--critical); font-size: .78rem; font-weight: 500; margin-top: .15rem; }
+  .ls { font-size: .7rem; font-weight: 500; color: var(--primary); background: var(--primary-soft); border-radius: 6px; padding: 0 .3rem; margin-left: .2rem; }
   td .code { font-size: .75rem; font-weight: 400; color: var(--muted); margin-left: .3rem; }
   @container (max-width: 620px) { td .code { display: none; } }
   td.strong { color: var(--text); font-weight: 500; }
@@ -698,7 +705,8 @@
     html += f.slice(0, 20).map(function (x) {
       var when = (x.today ? '' : 'Vortag ') + hm(x.start) + (x.end - x.start > 60 ? '–' + hm(x.end) : '');
       return '<div class="row' + (x.today ? '' : ' old') + '"><span>' + when + '</span><span>' + esc(x.silo) +
-        (x.running ? ' <span class="live-dot">● läuft</span>' : '') + '</span><span class="t">+' + t(x.tons) + ' t</span></div>';
+        (x.running ? ' <span class="live-dot">● läuft</span>' : '') + (x.wrong ? ' <span class="r" title="Geliefertes Material passt nicht zum Silo">⚠ Material</span>' : '') +
+        '</span><span class="t">+' + t(x.tons) + ' t' + (x.dlv ? ' <span class="ls" title="Lieferschein">LS</span>' : '') + '</span></div>';
     }).join('');
     document.getElementById('fills').innerHTML = html + '</div>';
     // Kiosk: nur ganze Zeilen anzeigen, die vollständig in die Kachel passen
@@ -756,7 +764,13 @@
     var pos = mPos, range = mRange;
     return fetch(location.pathname + '?silo=' + pos + '&range=' + range, { cache: 'no-store', credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
-      .then(function (j) { if (pos === mPos && range === mRange) { mData = j; renderSilo(); } })
+      .then(function (j) {
+        if (pos !== mPos || range !== mRange) return;
+        mData = j;
+        var a = document.activeElement;
+        if (a && mbox.contains(a) && (a.classList.contains('dlv') || a.classList.contains('dmat'))) return;   // nicht beim Tippen neu aufbauen
+        renderSilo();
+      })
       .catch(function () { if (!mData) mbox.innerHTML = '<div class="loading">Daten konnten nicht geladen werden.</div>'; });
   }
   function hideTip() { document.getElementById('tip').style.display = 'none'; }
@@ -801,26 +815,65 @@
 
       '<div class="mgrid">' +
         '<div class="mpanel wide"><h4>Füllstandsverlauf<span class="legend"><span><i style="background:var(--primary)"></i>Füllstand</span><span><i style="background:var(--fill);height:10px;opacity:.35"></i>Befüllung</span><span><i style="background:var(--warning)"></i>Warnschwelle</span></span></h4><div class="mchart" id="mLine"></div></div>' +
-        '<div class="mpanel"><h4>Verbrauch je Tag &amp; Schicht<span class="legend">' + [1, 2, 3].map(function (i) { return '<span><i style="background:' + SHIFT_COL[i] + ';height:10px"></i>' + m.shiftNames[i] + '</span>'; }).join('') + '<span><i style="background:var(--fill);height:10px"></i>Befüllung</span></span></h4><div class="mchart" id="mBars"></div></div>' +
-        '<div class="mpanel"><h4 title="Menge = Höchststand − Stand vorher + Entnahme während der Befüllung">Befüllungen<small style="font-weight:400;color:var(--text-2);font-size:.85rem">' + rangeTxt[m.range] + '</small></h4><div class="scroll" style="max-height:260px"><table id="mFills"></table></div></div>' +
+        '<div class="mpanel wide"><h4>Verbrauch je Tag &amp; Schicht<span class="legend">' + [1, 2, 3].map(function (i) { return '<span><i style="background:' + SHIFT_COL[i] + ';height:10px"></i>' + m.shiftNames[i] + '</span>'; }).join('') + '<span><i style="background:var(--fill);height:10px"></i>Befüllung</span></span></h4><div class="mchart" id="mBars"></div></div>' +
+        '<div class="mpanel wide"><h4>Befüllungen · ' + rangeTxt[m.range] + '<small id="mCheck" style="font-weight:400;color:var(--text-2);font-size:.85rem"></small></h4><div class="scroll" style="max-height:300px"><table id="mFills"></table></div></div>' +
       '</div>';
 
     drawLine(document.getElementById('mLine'), m);
     drawBars(document.getElementById('mBars'), m);
 
+    var ck = m.check;
+    var hdr = document.getElementById('mCheck');
+    if (hdr) hdr.innerHTML = ck ? 'Messung ↔ Lieferschein: <b class="' + (Math.abs(ck.dev) > 5 ? 'o' : 'g') + '">' + (ck.dev > 0 ? '+' : '') + nf1.format(ck.dev) + ' %</b> (' + ck.n + ' Befüllung' + (ck.n === 1 ? '' : 'en') + ')' +
+      (ck.suggest ? ' · Vorschlag Schüttdichte ' + esc(mname(ck.material)) + ': <b>' + new Intl.NumberFormat('de-DE', { maximumFractionDigits: 3 }).format(ck.suggest) + ' t/m³</b> (bisher ' + new Intl.NumberFormat('de-DE', { maximumFractionDigits: 3 }).format(ck.density) + ')' : '')
+      : 'Lieferschein-Menge eintragen und mit Enter bestätigen – gebuchte Befüllung und Verbrauch werden korrigiert.';
+    var matOpts = function (sel, cur) {
+      var list = (m.matList || []).slice();
+      if (sel && list.indexOf(sel) < 0) list.push(sel);
+      return '<option value="">' + (cur ? esc(mname(cur)) + ' (Silo)' : '–') + '</option>' +
+        list.map(function (x) { return '<option value="' + esc(x) + '"' + (x === sel ? ' selected' : '') + '>' + esc(mname(x)) + '</option>'; }).join('');
+    };
     document.getElementById('mFills').innerHTML = m.fills.length ?
-      '<thead><tr><th>Datum</th><th>Zeit</th><th class="p3">Dauer</th><th class="p2" title="Stand vorher → Höchststand">Füllstand</th><th class="p2" title="Entnahme während der Befüllung (hochgerechnet)">+ Entnahme</th><th>Menge</th></tr></thead><tbody>' +
+      '<thead><tr><th>Datum</th><th>Zeit</th><th class="p3">Dauer</th><th title="Höchststand − Stand vorher + Entnahme während der Befüllung">Gemessen</th>' +
+      '<th class="p2" style="text-align:left">Material laut Lieferschein</th><th>Lieferschein t</th><th class="p2">Abw.</th></tr></thead><tbody>' +
       m.fills.map(function (f) {
-        var d0 = new Date(f.start * 1000);
-        return '<tr><td>' + wd(d0.getFullYear() + '-' + pad(d0.getMonth() + 1) + '-' + pad(d0.getDate())) + ' ' + pad(d0.getDate()) + '.' + pad(d0.getMonth() + 1) + '.</td>' +
+        var d0 = new Date(f.start * 1000), meas = f.meas != null ? f.meas : f.tons;
+        var how = f.base != null && f.peak != null ? t(f.base) + ' → ' + t(f.peak) + ' t' + (f.comp != null ? ' + ' + t(f.comp) + ' t Entnahme' : '') : '';
+        var wrong = f.dmat && f.mat && f.dmat.toUpperCase() !== String(f.mat).toUpperCase();
+        var dev = f.dlv ? (meas - f.dlv) / f.dlv * 100 : null;
+        return '<tr' + (wrong ? ' class="wrongmat"' : '') + '><td>' + wd(d0.getFullYear() + '-' + pad(d0.getMonth() + 1) + '-' + pad(d0.getDate())) + ' ' + pad(d0.getDate()) + '.' + pad(d0.getMonth() + 1) + '.</td>' +
           '<td>' + hm(f.start) + (f.end - f.start > 60 ? '–' + hm(f.end) : '') + (f.running ? ' <span class="live-dot">● läuft</span>' : '') + '</td>' +
           '<td class="p3">' + (f.end - f.start > 60 ? dur(f.end - f.start) : '–') + '</td>' +
-          '<td class="p2 muted">' + (f.base != null && f.peak != null ? t(f.base) + ' → ' + t(f.peak) : (f.base != null ? t(f.base) + ' → …' : '–')) + '</td>' +
-          '<td class="p2 muted">' + (f.comp != null ? '+' + t(f.comp) : '–') + '</td>' +
-          '<td class="strong">+' + t(f.tons) + '</td></tr>';
-      }).join('') + '</tbody><tfoot><tr><td>Summe</td><td></td><td class="p3"></td><td class="p2"></td><td class="p2"></td><td>+' + t(fillSum) + '</td></tr></tfoot>'
+          '<td class="' + (f.dlv ? 'muted' : 'strong') + '" title="' + esc(how) + '">' + t(meas) + '</td>' +
+          '<td class="p2" style="text-align:left">' + (f.running ? '' : '<select class="dmat" data-start="' + f.start + '">' + matOpts(f.dmat, f.mat) + '</select>') +
+            (wrong ? '<div class="warnmat">⚠ Silo enthält ' + esc(mname(f.mat)) + '</div>' : '') + '</td>' +
+          '<td>' + (f.running ? '<span class="muted">läuft …</span>' : '<input class="dlv" type="text" inputmode="decimal" autocomplete="off" data-start="' + f.start + '" value="' + (f.dlv ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2, useGrouping: false }).format(f.dlv) : '') + '" placeholder="t">') + '</td>' +
+          '<td class="p2 ' + (dev == null ? 'zero' : (Math.abs(dev) > 5 ? 'o' : 'g')) + '">' + (dev == null ? '–' : (dev > 0 ? '+' : '') + nf1.format(dev) + ' %') + '</td></tr>';
+      }).join('') + '</tbody><tfoot><tr><td>Summe gebucht</td><td></td><td class="p3"></td><td>+' + t(fillSum) + '</td><td class="p2"></td><td></td><td class="p2"></td></tr></tfoot>'
       : '<tbody><tr><td class="empty">Keine Befüllungen im Zeitraum</td></tr></tbody>';
   }
+
+  function postDelivered(params) {
+    var body = new URLSearchParams(params); body.set('pos', mPos);
+    return fetch(location.pathname + '?delivered=1', { method: 'POST', body: body, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(); return Promise.all([loadSilo(), load()]); });
+  }
+  mbox.addEventListener('keydown', function (e) {
+    if (e.target.classList && e.target.classList.contains('dlv') && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+  });
+  mbox.addEventListener('change', function (e) {
+    var el = e.target; lastTouch = Date.now();
+    if (el.classList.contains('dlv')) {
+      var v = el.value.trim().replace(/\./g, '').replace(',', '.');
+      if (v !== '' && (isNaN(+v) || +v < 0 || +v > 1000)) { el.classList.add('bad'); return; }
+      el.classList.remove('bad'); el.classList.add('saving');
+      postDelivered({ start: el.getAttribute('data-start'), tons: v }).catch(function () { el.classList.remove('saving'); el.classList.add('bad'); });
+    } else if (el.classList.contains('dmat')) {
+      el.classList.add('saving');
+      postDelivered({ start: el.getAttribute('data-start'), material: el.value }).catch(function () { el.classList.remove('saving'); el.classList.add('bad'); });
+    }
+  });
 
   function drawLine(el, m) {
     if (!m.archived) {

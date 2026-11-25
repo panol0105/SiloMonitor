@@ -33,6 +33,23 @@ ohne Fehlbuchung als Verbrauch oder Befüllung.
 Voraussetzung: Die %-Variable gibt den **Volumen**-Füllgrad an (bei reiner Höhenmessung
 ist der Konus nicht linear).
 
+## Lieferschein-Abgleich
+
+Im Silo-Popup (Silo anklicken) hat jede abgeschlossene Befüllung ein Feld **„Lieferschein t“**
+und eine Auswahl **„Material laut Lieferschein“**:
+
+- **Menge eintragen + Enter:** Die gebuchte Befüllung wird durch die Lieferschein-Menge ersetzt,
+  der Verbrauch um dieselbe Differenz korrigiert (Bilanz passt weiter zum Füllstand). Feld leeren = Messwert gilt wieder.
+- **Material wählen:** Weicht das gelieferte Material vom Material im Silo ab, erscheint eine Warnung
+  (auch in der Liste „Befüllungen heute“).
+- Pro Befüllung wird die Abweichung Messung ↔ Lieferschein angezeigt. Ab zwei Lieferscheinen desselben Materials
+  (berechnete Tonnen) schlägt das Modul eine korrigierte **Schüttdichte** vor.
+- Skriptzugriff: `SILO_SetDelivered($id, $Pos, $Beginn, $Tonnen)`, `SILO_SetDeliveredMaterial($id, $Pos, $Beginn, 'BA.ACP.B')`.
+- Eingetragene Werte bleiben bei „Aus Archiv neu berechnen“ erhalten.
+
+Hinweis: Die Eingabe läuft über den WebHook ohne Anmeldung – das Dashboard daher nur im internen Netz betreiben
+(oder in der WebHook-Instanz einen Benutzer/Passwort setzen).
+
 ## Schrift
 
 Das Dashboard nutzt **Poppins** (wie die Trafo-Übersicht). Ist sie auf dem
